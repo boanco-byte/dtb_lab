@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Danh sách lịch hẹn - Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        body { background: #f4f7fc; }
+        .card-custom { border: none; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); }
+        .filter-btn { cursor: pointer; }
+    </style>
+</head>
+<body>
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3><i class="fas fa-calendar-check text-primary"></i> Lịch hẹn</h3>
+        <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left"></i> Quay lại</a>
+    </div>
+    <div class="card card-custom p-4">
+        <div class="d-flex gap-2 mb-3 flex-wrap">
+            <button class="btn btn-outline-primary filter-btn active" data-filter="all">Tất cả</button>
+            <button class="btn btn-outline-secondary filter-btn" data-filter="Chờ khám">Chờ khám</button>
+            <button class="btn btn-outline-warning filter-btn" data-filter="Đang khám">Đang khám</button>
+            <button class="btn btn-outline-success filter-btn" data-filter="Đã khám">Đã khám</button>
+            <button class="btn btn-outline-danger filter-btn" data-filter="Đã hủy">Đã hủy</button>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light"><tr><th>BN</th><th>Bác sĩ</th><th>Bắt đầu</th><th>Kết thúc</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+                <tbody id="lichTableBody"><tr><td colspan="6" class="text-center text-muted">Đang tải...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+    let allAppointments = [];
+    let currentFilter = 'all';
+
+    async function loadAppointments() {
+        try {
+            const res = await fetch('http://localhost:5000/api/lich-hen');
+            allAppointments = await res.json();
+            render(currentFilter);
+        } catch {
+            document.getElementById('lichTableBody').innerHTML = `<tr><td colspan="6" class="text-danger text-center">Lỗi tải</td></tr>`;
+        }
+    }
+
+    function render(filter) {
+        const filtered = filter === 'all' ? allAppointments : allAppointments.filter(a => a.TrangThai === filter);
+        const tbody = document.getElementById('lichTableBody');
+        if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Không có lịch hẹn</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = filtered.map(l => `
+            <tr>
+                <td>${l.ten_benh_nhan}</td>
+                <td>${l.ten_bac_si}</td>
+                <td>${new Date(l.ThoiGianBatDau).toLocaleString('vi-VN')}</td>
+                <td>${new Date(l.ThoiGianKetThuc).toLocaleString('vi-VN')}</td>
+                <td><span class="badge bg-${l.TrangThai === 'Đã khám' ? 'success' : l.TrangThai === 'Đang khám' ? 'warning' : l.TrangThai === 'Đã hủy' ? 'danger' : 'secondary'}">${l.TrangThai}</span></td>
+                <td>
+                    ${['Chờ khám', 'Đang khám'].includes(l.TrangThai) ? 
+                        `<button class="btn btn-danger btn-sm" onclick="huyLich(${l.MaLH})"><i class="fas fa-times"></i> Hủy</button>` : 
+                        `<span class="text-muted">—</span>`
+                    }
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function huyLich(maLH) {
+        if (!confirm('Bạn có chắc muốn hủy lịch hẹn này?')) return;
+        try {
+            const res = await fetch(`http://localhost:5000/api/lich-hen/huy/${maLH}`, { method: 'PUT' });
+            const data = await res.json();
+            if (res.ok) {
+                alert('Hủy lịch thành công');
+                loadAppointments();
+            } else {
+                alert('Lỗi: ' + data.error);
+            }
+        } catch (err) {
+            alert('Lỗi kết nối');
+        }
+    }
+
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            currentFilter = this.dataset.filter;
+            render(currentFilter);
+        });
+    });
+
+    loadAppointments();
+</script>
+</body>
+</html>

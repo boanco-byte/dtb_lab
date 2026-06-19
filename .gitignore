@@ -1,0 +1,12 @@
+# Bỏ qua thư mục thư viện của Node.js (Bắt buộc)
+node_modules/
+
+# Bỏ qua các file cấu hình môi trường chứa thông tin bảo mật/mật khẩu
+.env
+
+# Bỏ qua file nhật ký lỗi
+*.log
+
+# Bỏ qua các file cấu hình của phần mềm viết code
+.vscode/
+.idea/
