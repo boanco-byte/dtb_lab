@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sửa thuốc</title>
+    <title>Thêm thuốc</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <style>
@@ -19,101 +19,73 @@
 <div class="container">
     <a href="quan-ly-kho.html" class="back-link"><i class="fas fa-arrow-left"></i> Quay lại</a>
     <div class="card card-custom p-4 bg-white">
-        <h3 class="text-center mb-4"><i class="fas fa-pills text-primary"></i> Sửa thuốc</h3>
-        <form id="formSuaThuoc">
+        <h3 class="text-center mb-4"><i class="fas fa-pills text-primary"></i> Thêm thuốc mới</h3>
+        <form id="formThemThuoc">
             <div class="mb-3">
-                <label class="form-label fw-semibold">Mã thuốc</label>
-                <input type="text" class="form-control" id="MaThuoc" readonly>
+                <label class="form-label fw-semibold">Mã thuốc <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="MaThuoc" placeholder="VD: T008" required>
             </div>
             <div class="mb-3">
                 <label class="form-label fw-semibold">Tên thuốc <span class="text-danger">*</span></label>
-                <input type="text" class="form-control" id="TenThuoc" required>
+                <input type="text" class="form-control" id="TenThuoc" placeholder="VD: Ciprofloxacin 500mg" required>
             </div>
             <div class="mb-3">
                 <label class="form-label fw-semibold">Đơn vị</label>
-                <input type="text" class="form-control" id="DonVi">
+                <input type="text" class="form-control" id="DonVi" placeholder="Viên" value="Viên">
             </div>
             <div class="mb-3">
                 <label class="form-label fw-semibold">Nhà sản xuất</label>
-                <input type="text" class="form-control" id="NhaSX">
+                <input type="text" class="form-control" id="NhaSX" placeholder="VD: DHG">
             </div>
             <div class="mb-3">
                 <label class="form-label fw-semibold">Đơn giá <span class="text-danger">*</span></label>
-                <input type="number" class="form-control" id="DonGia" required>
+                <input type="number" class="form-control" id="DonGia" placeholder="15000" required>
             </div>
             <div class="mb-3">
                 <label class="form-label fw-semibold">Tồn kho</label>
-                <input type="number" class="form-control" id="SoLuongTon">
+                <input type="number" class="form-control" id="SoLuongTon" placeholder="0" value="0">
             </div>
             <div id="message" class="mb-3"></div>
-            <button type="submit" class="btn btn-primary w-100"><i class="fas fa-save"></i> Cập nhật</button>
+            <button type="submit" class="btn btn-primary w-100"><i class="fas fa-save"></i> Thêm thuốc</button>
         </form>
     </div>
 </div>
 <script>
     const API = 'http://localhost:5000/api/benh-nhan/thuoc';
-    const urlParams = new URLSearchParams(window.location.search);
-    const maThuoc = urlParams.get('maThuoc');
-    if (!maThuoc) {
-        alert('Thiếu mã thuốc');
-        window.location.href = 'quan-ly-kho.html';
-    }
-
-    async function loadMedicine() {
-        try {
-            const res = await fetch(API);
-            const medicines = await res.json();
-            const med = medicines.find(m => m.MaThuoc === maThuoc);
-            if (!med) {
-                alert('Không tìm thấy thuốc');
-                window.location.href = 'quan-ly-kho.html';
-                return;
-            }
-            document.getElementById('MaThuoc').value = med.MaThuoc;
-            document.getElementById('TenThuoc').value = med.TenThuoc;
-            document.getElementById('DonVi').value = med.DonVi || '';
-            document.getElementById('NhaSX').value = med.NhaSX || '';
-            document.getElementById('DonGia').value = med.DonGia;
-            document.getElementById('SoLuongTon').value = med.SoLuongTon;
-        } catch (err) {
-            alert('Lỗi tải dữ liệu: ' + err.message);
-        }
-    }
-
-    document.getElementById('formSuaThuoc').addEventListener('submit', async function(e) {
+    document.getElementById('formThemThuoc').addEventListener('submit', async function(e) {
         e.preventDefault();
+        const MaThuoc = document.getElementById('MaThuoc').value.trim();
         const TenThuoc = document.getElementById('TenThuoc').value.trim();
         const DonVi = document.getElementById('DonVi').value.trim();
         const NhaSX = document.getElementById('NhaSX').value.trim();
         const DonGia = parseFloat(document.getElementById('DonGia').value);
         const SoLuongTon = parseInt(document.getElementById('SoLuongTon').value) || 0;
 
-        if (!TenThuoc || isNaN(DonGia)) {
+        if (!MaThuoc || !TenThuoc || isNaN(DonGia)) {
             document.getElementById('message').innerHTML = '<div class="alert alert-warning">Vui lòng điền đầy đủ thông tin bắt buộc (*)</div>';
             return;
         }
 
-        const payload = { TenThuoc, DonVi, NhaSX, DonGia, SoLuongTon };
+        const payload = { MaThuoc, TenThuoc, DonVi, NhaSX, DonGia, SoLuongTon };
 
         try {
-            const res = await fetch(`${API}/${maThuoc}`, {
-                method: 'PUT',
+            const res = await fetch(API, {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
             const data = await res.json();
             const msg = document.getElementById('message');
             if (res.ok) {
-                msg.innerHTML = `<div class="alert alert-success">✅ Cập nhật thành công <strong>${data.TenThuoc}</strong></div>`;
+                msg.innerHTML = `<div class="alert alert-success">✅ Thêm thành công <strong>${data.TenThuoc}</strong> (Mã: ${data.MaThuoc})</div>`;
+                this.reset();
             } else {
-                msg.innerHTML = `<div class="alert alert-danger">❌ ${data.error || 'Không cập nhật được'}</div>`;
+                msg.innerHTML = `<div class="alert alert-danger">❌ ${data.error || 'Không thêm được'}</div>`;
             }
         } catch (err) {
             document.getElementById('message').innerHTML = `<div class="alert alert-danger">❌ Lỗi kết nối: ${err.message}</div>`;
         }
     });
-
-    loadMedicine();
 </script>
 </body>
 </html>

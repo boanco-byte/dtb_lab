@@ -29,6 +29,7 @@
         <li class="nav-item"><a class="nav-link" href="lich-hen.html"><i class="fas fa-calendar-check"></i> Lịch hẹn</a></li>
         <li class="nav-item"><a class="nav-link" href="dat-lich.html"><i class="fas fa-calendar-plus"></i> Đặt lịch</a></li>
         <li class="nav-item"><a class="nav-link" href="lich-su-kham.html"><i class="fas fa-history"></i> Lịch sử khám</a></li>
+        <li class="nav-item"><a class="nav-link" href="hoa-don.html"><i class="fas fa-file-invoice"></i> Hóa đơn</a></li>
         <li class="nav-item"><span class="nav-link logout-btn text-danger" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Đăng xuất</span></li>
       </ul>
     </nav>
@@ -36,16 +37,22 @@
     <main class="col-md-10 ms-sm-auto px-md-4 main-content">
       <h2><i class="fas fa-user-md text-primary"></i> Xin chào, <span id="welcomeName">...</span></h2>
       <div class="row g-4 mt-3">
-        <div class="col-md-6">
+        <div class="col-md-4">
           <div class="card-stats">
             <div class="number" id="upcomingCount">0</div>
             <div class="text-muted">Lịch hẹn sắp tới</div>
           </div>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-4">
           <div class="card-stats border-success">
             <div class="number" id="totalRecords">0</div>
             <div class="text-muted">Tổng số lần khám</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card-stats border-warning">
+            <div class="number" id="totalInvoices">0</div>
+            <div class="text-muted">Tổng số hóa đơn</div>
           </div>
         </div>
       </div>
@@ -64,24 +71,44 @@
 
   async function loadDashboard() {
     try {
-      const res = await fetch('http://localhost:5000/api/patient/lich-hen', {
+      // Lấy danh sách lịch hẹn
+      const resApp = await fetch('http://localhost:5000/api/patient/lich-hen', {
         headers: { 'x-mabn': user.MaBN }
       });
-      const appointments = await res.json();
-      const now = new Date();
-      const upcoming = appointments.filter(a => new Date(a.ThoiGianBatDau) > now);
-      document.getElementById('upcomingCount').textContent = upcoming.length;
-      document.getElementById('totalRecords').textContent = appointments.length;
+      const appointments = await resApp.json();
 
-      const recent = upcoming.slice(0, 3);
+      const now = new Date();
+
+      // Lọc lịch hẹn sắp tới: chỉ tính những lịch có trạng thái Chờ khám hoặc Đang khám và thời gian bắt đầu >= hiện tại
+      const upcoming = appointments.filter(a => {
+        const start = new Date(a.ThoiGianBatDau);
+        return (a.TrangThai === 'Chờ khám' || a.TrangThai === 'Đang khám') && start >= now;
+      });
+
+      // Tổng số lần khám: chỉ tính những lịch đã hoàn thành (Đã khám)
+      const totalRecords = appointments.filter(a => a.TrangThai === 'Đã khám').length;
+
+      document.getElementById('upcomingCount').textContent = upcoming.length;
+      document.getElementById('totalRecords').textContent = totalRecords;
+
+      // Lấy lịch sử khám để đếm số hóa đơn
+      const resHist = await fetch('http://localhost:5000/api/patient/lich-su-kham', {
+        headers: { 'x-mabn': user.MaBN }
+      });
+      const history = await resHist.json();
+      const totalInvoices = history.filter(item => item.hoaDon !== null).length;
+      document.getElementById('totalInvoices').textContent = totalInvoices;
+
+      // Hiển thị 3 lịch hẹn gần nhất (sắp tới hoặc đã qua nhưng gần đây)
+      const recent = appointments.slice(0, 3);
       const container = document.getElementById('recentAppointments');
       if (recent.length === 0) {
-        container.innerHTML = '<p class="text-muted">Không có lịch hẹn sắp tới</p>';
+        container.innerHTML = '<p class="text-muted">Không có lịch hẹn nào</p>';
       } else {
         container.innerHTML = recent.map(l => `
           <div class="border p-2 mb-2 rounded">
             <strong>${l.ten_bac_si}</strong> - ${new Date(l.ThoiGianBatDau).toLocaleString('vi-VN')}
-            <span class="badge bg-${l.TrangThai === 'Đã khám' ? 'success' : l.TrangThai === 'Đang khám' ? 'warning' : 'secondary'}">${l.TrangThai}</span>
+            <span class="badge bg-${l.TrangThai === 'Đã khám' ? 'success' : l.TrangThai === 'Đang khám' ? 'warning' : l.TrangThai === 'Đã hủy' ? 'danger' : 'secondary'}">${l.TrangThai}</span>
           </div>
         `).join('');
       }
