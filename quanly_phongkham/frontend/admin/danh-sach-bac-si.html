@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Danh sách bác sĩ</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        body { background: #f4f7fc; font-family: 'Segoe UI', sans-serif; }
+        .card-custom { border: none; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); }
+        .table-hover tbody tr:hover { background-color: #eef3fa; }
+        .search-box { max-width: 300px; }
+        .btn-primary { background: #0d6efd; border: none; border-radius: 30px; padding: 8px 20px; font-weight: 600; }
+        .btn-primary:hover { background: #0b5ed7; }
+        .btn-outline-secondary { border-radius: 30px; }
+    </style>
+</head>
+<body>
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3><i class="fas fa-user-md text-primary"></i> Danh sách bác sĩ</h3>
+        <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left"></i> Quay lại</a>
+    </div>
+    <div class="card card-custom p-4">
+        <div class="d-flex justify-content-between mb-3">
+            <div class="search-box">
+                <input type="text" id="searchDoctor" class="form-control" placeholder="🔍 Tìm theo tên hoặc mã BS">
+            </div>
+            <div>
+                <a href="them-bac-si.html" class="btn btn-primary"><i class="fas fa-plus"></i> Thêm bác sĩ</a>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Mã BS</th>
+                        <th>Họ tên</th>
+                        <th>Chuyên khoa</th>
+                        <th>SĐT</th>
+                        <th>Phòng khám</th>
+                        <th>Hành động</th>
+                    </tr>
+                </thead>
+                <tbody id="doctorTableBody">
+                    <tr><td colspan="6" class="text-center text-muted">Đang tải...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+    let doctors = [];
+
+    async function loadDoctors() {
+        try {
+            const res = await fetch('http://localhost:5000/api/benh-nhan/bac-si');
+            let data = await res.json();
+            data.sort((a, b) => b.MaBS.localeCompare(a.MaBS));
+            doctors = data.slice(0, 100);
+            render(doctors);
+        } catch {
+            document.getElementById('doctorTableBody').innerHTML = `<tr><td colspan="6" class="text-danger text-center">Lỗi tải dữ liệu</td></tr>`;
+        }
+    }
+
+    function render(list) {
+        const tbody = document.getElementById('doctorTableBody');
+        if (list.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Không có bác sĩ</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = list.map(d => `
+            <tr>
+                <td><span class="badge bg-primary">${d.MaBS}</span></td>
+                <td><strong>${d.HoTen}</strong></td>
+                <td>${d.ChuyenKhoa}</td>
+                <td>${d.SDT}</td>
+                <td>${d.TenPhong || 'Chưa phân công'}</td>
+                <td>
+                    <button class="btn btn-warning btn-sm" onclick="suaBacSi('${d.MaBS}')"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-danger btn-sm" onclick="xoaBacSi('${d.MaBS}')"><i class="fas fa-trash"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function suaBacSi(maBS) {
+        alert('Chức năng sửa đang phát triển.');
+    }
+
+    function suaBacSi(maBS) {
+        window.location.href = `sua-bac-si.html?maBS=${maBS}`;
+    }
+
+    async function xoaBacSi(maBS) {
+        if (!confirm(`Xóa bác sĩ ${maBS}?`)) return;
+        try {
+            const res = await fetch(`http://localhost:5000/api/benh-nhan/bac-si/${maBS}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (res.ok) {
+                alert('Xóa thành công');
+                loadDoctors();
+            } else {
+                alert('Lỗi: ' + data.error);
+            }
+        } catch {
+            alert('Lỗi kết nối');
+        }
+    }
+
+    document.getElementById('searchDoctor').addEventListener('input', function() {
+        const kw = this.value.trim().toLowerCase();
+        if (!kw) return render(doctors);
+        const filtered = doctors.filter(d => 
+            d.HoTen.toLowerCase().includes(kw) || 
+            d.MaBS.toLowerCase().includes(kw)
+        );
+        render(filtered);
+    });
+
+    loadDoctors();
+</script>
+</body>
+</html>

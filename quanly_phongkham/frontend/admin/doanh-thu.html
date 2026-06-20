@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doanh thu</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <style>
+    body { background: #f4f7fc; font-family: 'Segoe UI', sans-serif; }
+    .card-custom { border: none; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); }
+    .table-hover tbody tr:hover { background-color: #eef3fa; }
+    .search-box { max-width: 300px; }
+    .btn-primary { background: #0d6efd; border: none; border-radius: 30px; padding: 8px 20px; font-weight: 600; }
+    .btn-primary:hover { background: #0b5ed7; }
+    .btn-outline-secondary { border-radius: 30px; }
+    .badge-status { padding: 6px 12px; border-radius: 20px; }
+  </style>
+</head>
+<body>
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3><i class="fas fa-chart-line text-primary"></i> Doanh thu</h3>
+    <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left"></i> Quay lại</a>
+  </div>
+
+  <!-- Báo cáo theo ngày -->
+  <div class="card card-custom p-4 mb-4">
+    <h5><i class="fas fa-calendar-day text-primary"></i> Báo cáo doanh thu theo ngày</h5>
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">Từ ngày</label>
+        <input type="date" class="form-control" id="tuNgay">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Đến ngày</label>
+        <input type="date" class="form-control" id="denNgay">
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary w-100" onclick="loadDoanhThuTheoNgay()"><i class="fas fa-chart-bar"></i> Xem</button>
+      </div>
+    </div>
+    <div id="doanhThuNgayResult" class="mt-3"></div>
+  </div>
+
+  <!-- Danh sách hóa đơn -->
+  <div class="card card-custom p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
+      <h5 class="mb-0"><i class="fas fa-file-invoice text-primary"></i> Danh sách hóa đơn gần đây</h5>
+      <div class="d-flex gap-2 flex-wrap">
+        <select id="filterTrangThai" class="form-select form-select-sm" style="width:150px;">
+          <option value="">-- Tất cả --</option>
+          <option value="Chưa thanh toán">Chưa thanh toán</option>
+          <option value="Đã thanh toán">Đã thanh toán</option>
+          <option value="Đã hủy">Đã hủy</option>
+        </select>
+        <input type="text" id="searchInvoice" class="form-control form-control-sm" placeholder="🔍 Tìm theo tên BN hoặc mã HD" style="width:250px;">
+        <button class="btn btn-sm btn-outline-secondary" onclick="loadInvoices()"><i class="fas fa-sync"></i> Làm mới</button>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Mã HD</th>
+            <th>Bệnh nhân</th>
+            <th>Ngày xuất</th>
+            <th>Tổng tiền</th>
+            <th>Trạng thái</th>
+            <th>Hành động</th>
+          </tr>
+        </thead>
+        <tbody id="invoiceTableBody">
+          <tr><td colspan="6" class="text-center text-muted">Đang tải...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal chi tiết hóa đơn -->
+<div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Chi tiết hóa đơn #<span id="detailMaHD"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="detailBody">
+        <p>Đang tải...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bootstrap JS và Popper -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+  const API_BASE = 'http://localhost:5000/api/thanh-toan';
+  let invoices = [];
+  let detailModal = null;
+
+  document.addEventListener('DOMContentLoaded', function() {
+    // Khởi tạo modal sau khi Bootstrap đã tải
+    const modalElement = document.getElementById('detailModal');
+    if (typeof bootstrap !== 'undefined') {
+      detailModal = new bootstrap.Modal(modalElement);
+      console.log('✅ Modal initialized');
+    } else {
+      console.error('❌ Bootstrap chưa được tải! Kiểm tra lại thẻ script.');
+      // Fallback: hiển thị thông báo lỗi khi người dùng click xem chi tiết
+    }
+
+    // Mặc định ngày hôm nay
+    const now = new Date();
+    document.getElementById('tuNgay').value = now.toISOString().split('T')[0];
+    document.getElementById('denNgay').value = now.toISOString().split('T')[0];
+    loadInvoices();
+  });
+
+  // ============================================================
+  // BÁO CÁO THEO NGÀY
+  // ============================================================
+  async function loadDoanhThuTheoNgay() {
+    const tuNgay = document.getElementById('tuNgay').value;
+    const denNgay = document.getElementById('denNgay').value;
+    if (!tuNgay || !denNgay) {
+      document.getElementById('doanhThuNgayResult').innerHTML = '<p class="text-warning">Vui lòng chọn khoảng ngày</p>';
+      return;
+    }
+    try {
+      const res = await fetch(`http://localhost:5000/api/thong-ke/doanh-thu-ngay?tuNgay=${tuNgay}&denNgay=${denNgay}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!Array.isArray(data)) {
+        document.getElementById('doanhThuNgayResult').innerHTML = '<div class="alert alert-danger">Dữ liệu không hợp lệ</div>';
+        return;
+      }
+      if (data.length === 0) {
+        document.getElementById('doanhThuNgayResult').innerHTML = '<div class="alert alert-info">Không có doanh thu trong khoảng này</div>';
+        return;
+      }
+      const tong = data.reduce((sum, item) => sum + item.tong, 0);
+      document.getElementById('doanhThuNgayResult').innerHTML = `
+        <div class="alert alert-success">
+          <h6>Tổng doanh thu từ ${tuNgay} đến ${denNgay}</h6>
+          <h4 class="text-primary">${new Intl.NumberFormat('vi-VN').format(tong)} VND</h4>
+          <hr>
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead><tr><th>Ngày</th><th>Doanh thu</th></tr></thead>
+              <tbody>
+                ${data.map(d => `
+                  <tr>
+                    <td>${new Date(d.ngay).toLocaleDateString('vi-VN')}</td>
+                    <td>${new Intl.NumberFormat('vi-VN').format(d.tong)} VND</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    } catch (err) {
+      console.error(err);
+      document.getElementById('doanhThuNgayResult').innerHTML = `<div class="alert alert-danger">Lỗi tải dữ liệu: ${err.message}</div>`;
+    }
+  }
+
+  // ============================================================
+  // DANH SÁCH HÓA ĐƠN
+  // ============================================================
+  async function loadInvoices() {
+    try {
+      const res = await fetch(`${API_BASE}/theo-ngay`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      let data = await res.json();
+      if (!Array.isArray(data)) data = [];
+      // Sắp xếp mới nhất trước
+      data.sort((a, b) => new Date(b.NgayXuat) - new Date(a.NgayXuat));
+      invoices = data;
+      renderInvoices(invoices);
+    } catch (err) {
+      console.error(err);
+      document.getElementById('invoiceTableBody').innerHTML = `<tr><td colspan="6" class="text-danger text-center">Lỗi tải dữ liệu</td></tr>`;
+    }
+  }
+
+  function renderInvoices(list) {
+    const tbody = document.getElementById('invoiceTableBody');
+    if (list.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Không có hóa đơn</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = list.map(hd => `
+      <tr>
+        <td><span class="badge bg-secondary">${hd.MaHD}</span></td>
+        <td><strong>${hd.ten_benh_nhan}</strong></td>
+        <td>${new Date(hd.NgayXuat).toLocaleString('vi-VN')}</td>
+        <td>${new Intl.NumberFormat('vi-VN').format(hd.TongTien)} VND</td>
+        <td><span class="badge bg-${hd.TrangThai === 'Đã thanh toán' ? 'success' : hd.TrangThai === 'Chưa thanh toán' ? 'warning' : 'danger'}">${hd.TrangThai}</span></td>
+        <td>
+          <button class="btn btn-info btn-sm" onclick="xemChiTiet(${hd.MaHD})"><i class="fas fa-eye"></i></button>
+          ${hd.TrangThai === 'Chưa thanh toán' ? `<button class="btn btn-success btn-sm" onclick="thanhToan(${hd.MaHD})"><i class="fas fa-check"></i></button>` : ''}
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  // Lọc theo trạng thái và tìm kiếm
+  document.getElementById('filterTrangThai').addEventListener('change', applyFilters);
+  document.getElementById('searchInvoice').addEventListener('input', applyFilters);
+
+  function applyFilters() {
+    const trangThai = document.getElementById('filterTrangThai').value;
+    const keyword = document.getElementById('searchInvoice').value.trim().toLowerCase();
+    let filtered = invoices;
+    if (trangThai) {
+      filtered = filtered.filter(hd => hd.TrangThai === trangThai);
+    }
+    if (keyword) {
+      filtered = filtered.filter(hd => 
+        hd.ten_benh_nhan.toLowerCase().includes(keyword) ||
+        hd.MaHD.toString().includes(keyword)
+      );
+    }
+    renderInvoices(filtered);
+  }
+
+  // ============================================================
+  // CHI TIẾT HÓA ĐƠN (MODAL)
+  // ============================================================
+  async function xemChiTiet(maHD) {
+    // Kiểm tra modal đã sẵn sàng
+    if (!detailModal) {
+      alert('Lỗi: Modal chưa sẵn sàng. Vui lòng tải lại trang.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/${maHD}`);
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      document.getElementById('detailMaHD').textContent = maHD;
+      const body = document.getElementById('detailBody');
+      body.innerHTML = `
+        <div class="row mb-3">
+          <div class="col-md-6"><strong>Bệnh nhân:</strong> ${data.ten_benh_nhan} (${data.MaBN})</div>
+          <div class="col-md-6"><strong>Ngày xuất:</strong> ${new Date(data.NgayXuat).toLocaleString('vi-VN')}</div>
+          <div class="col-md-6"><strong>Tổng tiền:</strong> ${new Intl.NumberFormat('vi-VN').format(data.TongTien)} VND</div>
+          <div class="col-md-6"><strong>Phương thức:</strong> ${data.PhuongThuc}</div>
+          <div class="col-md-6"><strong>Trạng thái:</strong> ${data.TrangThai}</div>
+          <div class="col-md-6"><strong>Tiền khám:</strong> ${new Intl.NumberFormat('vi-VN').format(data.TienKham)} VND</div>
+          <div class="col-md-6"><strong>Tiền thuốc:</strong> ${new Intl.NumberFormat('vi-VN').format(data.TienThuoc)} VND</div>
+        </div>
+        ${data.chi_tiet && data.chi_tiet.length > 0 ? `
+          <h6>Chi tiết đơn thuốc:</h6>
+          <table class="table table-sm table-bordered">
+            <thead><tr><th>Tên thuốc</th><th>Số lượng</th><th>Đơn giá</th><th>Liều dùng</th></tr></thead>
+            <tbody>
+              ${data.chi_tiet.map(d => `
+                <tr>
+                  <td>${d.TenThuoc}</td>
+                  <td>${d.SoLuong} ${d.DonVi || ''}</td>
+                  <td>${new Intl.NumberFormat('vi-VN').format(d.DonGia)} VND</td>
+                  <td>${d.LieuDung || ''}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        ` : `<p class="text-muted">Không có chi tiết thuốc</p>`}
+      `;
+      detailModal.show();
+    } catch (err) {
+      alert('Lỗi tải chi tiết hóa đơn: ' + err.message);
+    }
+  }
+
+  // ============================================================
+  // THANH TOÁN HÓA ĐƠN
+  // ============================================================
+  async function thanhToan(maHD) {
+    if (!confirm('Xác nhận thanh toán hóa đơn này?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/hoa-don/${maHD}`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message);
+        loadInvoices();
+        loadDoanhThuTheoNgay();
+      } else {
+        alert('Lỗi: ' + data.error);
+      }
+    } catch {
+      alert('Lỗi kết nối');
+    }
+  }
+</script>
+</body>
+</html>

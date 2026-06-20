@@ -2,10 +2,22 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 
-// Lấy danh sách bệnh nhân
+// ============================================================
+// 1. QUẢN LÝ BỆNH NHÂN – CÁC ROUTE CỤ THỂ (ĐẶT TRƯỚC ROUTE ĐỘNG)
+// ============================================================
+
+// Lấy danh sách bệnh nhân (có hỗ trợ tìm kiếm)
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM "BenhNhan" ORDER BY "HoTen"');
+    const { search } = req.query;
+    let query = 'SELECT * FROM "BenhNhan"';
+    const params = [];
+    if (search) {
+      query += ` WHERE "HoTen" ILIKE $1 OR "MaBN" ILIKE $1`;
+      params.push(`%${search}%`);
+    }
+    query += ` ORDER BY "HoTen"`;
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -26,7 +38,11 @@ router.get('/sdt/:sdt', async (req, res) => {
 // Thêm bệnh nhân mới
 router.post('/', async (req, res) => {
   try {
-    const { MaBN, HoTen, NgaySinh, GioiTinh, SDT } = req.body;
+    const { HoTen, NgaySinh, GioiTinh, SDT } = req.body;
+    const countResult = await pool.query('SELECT COUNT(*) FROM "BenhNhan"');
+    const count = parseInt(countResult.rows[0].count) + 1;
+    const MaBN = 'BN' + String(count).padStart(5, '0');
+
     const result = await pool.query(
       `INSERT INTO "BenhNhan" ("MaBN", "HoTen", "NgaySinh", "GioiTinh", "SDT")
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
@@ -34,7 +50,374 @@ router.post('/', async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    if (err.message.includes('chk_benhnhan_sdt')) {
+      res.status(400).json({ error: 'Số điện thoại không hợp lệ!' });
+    } else if (err.message.includes('duplicate key')) {
+      res.status(400).json({ error: 'Số điện thoại đã tồn tại!' });
+    } else {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+// ============================================================
+// 2. QUẢN LÝ BÁC SĨ (cho admin)
+// ============================================================
+
+// Lấy danh sách bác sĩ
+router.get('/bac-si', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT bs.*, pk."TenPhong"
+      FROM "BacSi" bs
+      LEFT JOIN "PhongKham" pk ON bs."MaPK" = pk."MaPK"
+      ORDER BY bs."HoTen"
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Lỗi lấy danh sách bác sĩ:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Cập nhật bác sĩ
+router.put('/bac-si/:maBS', async (req, res) => {
+  try {
+    const { maBS } = req.params;
+    const { HoTen, ChuyenKhoa, SDT, MaPK } = req.body;
+    const result = await pool.query(
+      `UPDATE "BacSi"
+       SET "HoTen" = $1, "ChuyenKhoa" = $2, "SDT" = $3, "MaPK" = $4
+       WHERE "MaBS" = $5
+       RETURNING *`,
+      [HoTen, ChuyenKhoa, SDT, MaPK, maBS]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy bác sĩ' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// 3. QUẢN LÝ KHO THUỐC (cho admin)
+// ============================================================
+
+// Lấy danh sách thuốc
+router.get('/thuoc', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT * FROM "Thuoc" ORDER BY "TenThuoc"
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Lỗi lấy danh sách thuốc:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Cập nhật thuốc
+router.put('/thuoc/:maThuoc', async (req, res) => {
+  try {
+    const { maThuoc } = req.params;
+    const { TenThuoc, DonVi, NhaSX, DonGia, SoLuongTon } = req.body;
+    const result = await pool.query(
+      `UPDATE "Thuoc"
+       SET "TenThuoc" = $1, "DonVi" = $2, "NhaSX" = $3, "DonGia" = $4, "SoLuongTon" = $5
+       WHERE "MaThuoc" = $6
+       RETURNING *`,
+      [TenThuoc, DonVi, NhaSX, DonGia, SoLuongTon, maThuoc]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy thuốc' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// 4. QUẢN LÝ BỆNH ÁN
+// ============================================================
+
+// Lấy danh sách bệnh án (có thể lọc theo MaBN)
+router.get('/benh-an', async (req, res) => {
+  try {
+    const { maBN } = req.query;
+    let query = `
+      SELECT ba.*, lh."MaBN", bn."HoTen" AS ten_benh_nhan, 
+             bs."HoTen" AS ten_bac_si, lh."ThoiGianBatDau"
+      FROM "BenhAn" ba
+      LEFT JOIN "LichHen" lh ON ba."MaLH" = lh."MaLH"
+      LEFT JOIN "BenhNhan" bn ON lh."MaBN" = bn."MaBN"
+      LEFT JOIN "BacSi" bs ON lh."MaBS" = bs."MaBS"
+      WHERE 1=1
+    `;
+    const params = [];
+    if (maBN) {
+      query += ` AND lh."MaBN" = $1`;
+      params.push(maBN);
+    }
+    query += ` ORDER BY ba."NgayTao" DESC, ba."MaBA" DESC`;
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Lấy chi tiết bệnh án (kèm đơn thuốc)
+router.get('/benh-an/:maBA', async (req, res) => {
+  try {
+    const { maBA } = req.params;
+    const result = await pool.query(
+      `SELECT ba.*, lh."MaBN", bn."HoTen" AS ten_benh_nhan,
+              bs."HoTen" AS ten_bac_si, lh."ThoiGianBatDau"
+       FROM "BenhAn" ba
+       LEFT JOIN "LichHen" lh ON ba."MaLH" = lh."MaLH"
+       LEFT JOIN "BenhNhan" bn ON lh."MaBN" = bn."MaBN"
+       LEFT JOIN "BacSi" bs ON lh."MaBS" = bs."MaBS"
+       WHERE ba."MaBA" = $1`,
+      [maBA]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy bệnh án' });
+    }
+    const benhAn = result.rows[0];
+    
+    // Lấy đơn thuốc
+    const thuocResult = await pool.query(
+      `SELECT dt.*, t."TenThuoc", t."DonGia"
+       FROM "DonThuoc" dt
+       JOIN "Thuoc" t ON dt."MaThuoc" = t."MaThuoc"
+       WHERE dt."MaBA" = $1`,
+      [maBA]
+    );
+    benhAn.don_thuoc = thuocResult.rows;
+    res.json(benhAn);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Tạo bệnh án mới
+router.post('/benh-an', async (req, res) => {
+  try {
+    const { MaLH, ChanDoan, TrieuChung, GhiChu } = req.body;
+    if (!MaLH) {
+      return res.status(400).json({ error: 'Thiếu mã lịch hẹn' });
+    }
+    const check = await pool.query(
+      `SELECT "MaLH" FROM "LichHen" WHERE "MaLH" = $1 AND "TrangThai" IN ('Chờ khám', 'Đang khám')`,
+      [MaLH]
+    );
+    if (check.rows.length === 0) {
+      return res.status(400).json({ error: 'Lịch hẹn không hợp lệ hoặc đã có bệnh án' });
+    }
+    const result = await pool.query(
+      `INSERT INTO "BenhAn" ("MaLH", "ChanDoan", "TrieuChung", "GhiChu")
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [MaLH, ChanDoan, TrieuChung, GhiChu]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Cập nhật bệnh án
+router.put('/benh-an/:maBA', async (req, res) => {
+  try {
+    const { maBA } = req.params;
+    const { ChanDoan, TrieuChung, GhiChu } = req.body;
+    const result = await pool.query(
+      `UPDATE "BenhAn"
+       SET "ChanDoan" = $1, "TrieuChung" = $2, "GhiChu" = $3
+       WHERE "MaBA" = $4
+       RETURNING *`,
+      [ChanDoan, TrieuChung, GhiChu, maBA]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy bệnh án' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Xóa bệnh án
+router.delete('/benh-an/:maBA', async (req, res) => {
+  try {
+    const { maBA } = req.params;
+    const check = await pool.query(
+      `SELECT EXISTS (SELECT 1 FROM "DonThuoc" WHERE "MaBA" = $1)`,
+      [maBA]
+    );
+    if (check.rows[0].exists) {
+      return res.status(400).json({ error: 'Không thể xóa bệnh án đã có đơn thuốc' });
+    }
+    const checkInvoice = await pool.query(
+      `SELECT EXISTS (SELECT 1 FROM "HoaDon" WHERE "MaBA" = $1)`,
+      [maBA]
+    );
+    if (checkInvoice.rows[0].exists) {
+      return res.status(400).json({ error: 'Không thể xóa bệnh án đã có hóa đơn' });
+    }
+    await pool.query(`DELETE FROM "BenhAn" WHERE "MaBA" = $1`, [maBA]);
+    res.json({ message: 'Xóa bệnh án thành công' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// 5. CÁC ROUTE ĐỘNG (PHẢI ĐẶT SAU CÁC ROUTE CỤ THỂ)
+// ============================================================
+
+// Lấy thông tin một bệnh nhân theo mã
+router.get('/:maBN', async (req, res) => {
+  try {
+    const { maBN } = req.params;
+    const result = await pool.query('SELECT * FROM "BenhNhan" WHERE "MaBN" = $1', [maBN]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy bệnh nhân' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Cập nhật bệnh nhân (theo mã)
+router.put('/:maBN', async (req, res) => {
+  try {
+    const { maBN } = req.params;
+    const { HoTen, NgaySinh, GioiTinh, SDT } = req.body;
+    const result = await pool.query(
+      `UPDATE "BenhNhan"
+       SET "HoTen" = $1, "NgaySinh" = $2, "GioiTinh" = $3, "SDT" = $4
+       WHERE "MaBN" = $5
+       RETURNING *`,
+      [HoTen, NgaySinh, GioiTinh, SDT, maBN]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy bệnh nhân' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.message.includes('chk_benhnhan_sdt')) {
+      res.status(400).json({ error: 'Số điện thoại không hợp lệ!' });
+    } else {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+// Xóa bệnh nhân
+router.delete('/:maBN', async (req, res) => {
+  try {
+    const { maBN } = req.params;
+    const check = await pool.query(
+      `SELECT EXISTS (SELECT 1 FROM "LichHen" WHERE "MaBN" = $1)`,
+      [maBN]
+    );
+    if (check.rows[0].exists) {
+      return res.status(400).json({ error: 'Không thể xóa bệnh nhân đã có lịch hẹn!' });
+    }
+    await pool.query('DELETE FROM "BenhNhan" WHERE "MaBN" = $1', [maBN]);
+    res.json({ message: 'Xóa bệnh nhân thành công' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Lấy bệnh án + đơn thuốc của một bệnh nhân
+router.get('/:maBN/benh-an', async (req, res) => {
+  try {
+    const { maBN } = req.params;
+    const bnCheck = await pool.query('SELECT "MaBN" FROM "BenhNhan" WHERE "MaBN" = $1', [maBN]);
+    if (bnCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy bệnh nhân' });
+    }
+
+    const result = await pool.query(
+      `SELECT ba.*, bs."HoTen" AS ten_bac_si,
+              lh."ThoiGianBatDau"
+       FROM "BenhAn" ba
+       LEFT JOIN "LichHen" lh ON ba."MaLH" = lh."MaLH"
+       LEFT JOIN "BacSi" bs ON lh."MaBS" = bs."MaBS"
+       WHERE lh."MaBN" = $1
+       ORDER BY ba."NgayTao" DESC`,
+      [maBN]
+    );
+    const benhAns = result.rows;
+
+    for (let ba of benhAns) {
+      const thuocResult = await pool.query(
+        `SELECT dt.*, t."TenThuoc", t."DonGia"
+         FROM "DonThuoc" dt
+         JOIN "Thuoc" t ON dt."MaThuoc" = t."MaThuoc"
+         WHERE dt."MaBA" = $1`,
+        [ba.MaBA]
+      );
+      ba.don_thuoc = thuocResult.rows;
+    }
+
+    res.json(benhAns);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// THÊM MỚI BÁC SĨ
+// ============================================================
+router.post('/bac-si', async (req, res) => {
+  try {
+    const { MaBS, HoTen, ChuyenKhoa, SDT, MaPK } = req.body;
+    if (!MaBS || !HoTen || !ChuyenKhoa) {
+      return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
+    }
+    const result = await pool.query(
+      `INSERT INTO "BacSi" ("MaBS", "HoTen", "ChuyenKhoa", "SDT", "MaPK")
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [MaBS, HoTen, ChuyenKhoa, SDT, MaPK || null]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.message.includes('duplicate key')) {
+      res.status(400).json({ error: 'Mã bác sĩ đã tồn tại!' });
+    } else {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+// ============================================================
+// THÊM MỚI THUỐC
+// ============================================================
+router.post('/thuoc', async (req, res) => {
+  try {
+    const { MaThuoc, TenThuoc, DonVi, NhaSX, DonGia, SoLuongTon } = req.body;
+    if (!MaThuoc || !TenThuoc || !DonGia) {
+      return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
+    }
+    const result = await pool.query(
+      `INSERT INTO "Thuoc" ("MaThuoc", "TenThuoc", "DonVi", "NhaSX", "DonGia", "SoLuongTon")
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [MaThuoc, TenThuoc, DonVi || 'Viên', NhaSX || null, DonGia, SoLuongTon || 0]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.message.includes('duplicate key')) {
+      res.status(400).json({ error: 'Mã thuốc đã tồn tại!' });
+    } else {
+      res.status(500).json({ error: err.message });
+    }
   }
 });
 

@@ -10,7 +10,6 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Thiếu mã bệnh nhân hoặc mật khẩu' });
     }
 
-    // Kiểm tra bệnh nhân có tồn tại và khớp mật khẩu
     const result = await pool.query(
       `SELECT bn.*, tk."MatKhauHash"
        FROM "BenhNhan" bn
@@ -24,7 +23,6 @@ router.post('/login', async (req, res) => {
     }
 
     const user = result.rows[0];
-    // So sánh mật khẩu (dùng bcrypt hoặc pgcrypto). Ở đây dùng pgcrypto -> dùng hàm crypt trong query
     const check = await pool.query(
       `SELECT crypt($1, $2) = $2 AS match`,
       [matKhau, user.MatKhauHash]
@@ -34,7 +32,6 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Sai mật khẩu' });
     }
 
-    // Trả về thông tin bệnh nhân (không bao gồm hash)
     delete user.MatKhauHash;
     res.json({ message: 'Đăng nhập thành công', user });
   } catch (err) {

@@ -20,11 +20,27 @@
     <div class="card card-custom p-4 bg-white">
         <h3 class="text-center mb-4"><i class="fas fa-user-plus text-primary"></i> Thêm bệnh nhân mới</h3>
         <form id="formThemBN">
-            <div class="mb-3"><label class="form-label fw-semibold">Mã bệnh nhân <span class="text-danger">*</span></label><input type="text" class="form-control" id="MaBN" placeholder="VD: BN003" required></div>
-            <div class="mb-3"><label class="form-label fw-semibold">Họ tên <span class="text-danger">*</span></label><input type="text" class="form-control" id="HoTen" placeholder="Nguyễn Văn A" required></div>
-            <div class="mb-3"><label class="form-label fw-semibold">Ngày sinh</label><input type="date" class="form-control" id="NgaySinh"></div>
-            <div class="mb-3"><label class="form-label fw-semibold">Giới tính <span class="text-danger">*</span></label><select class="form-select" id="GioiTinh" required><option value="Nam">Nam</option><option value="Nữ">Nữ</option><option value="Khác">Khác</option></select></div>
-            <div class="mb-3"><label class="form-label fw-semibold">Số điện thoại <span class="text-danger">*</span></label><input type="text" class="form-control" id="SDT" placeholder="0912345678" required></div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Họ tên <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="HoTen" placeholder="Nguyễn Văn A" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Ngày sinh</label>
+                <input type="date" class="form-control" id="NgaySinh">
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Giới tính <span class="text-danger">*</span></label>
+                <select class="form-select" id="GioiTinh" required>
+                    <option value="Nam">Nam</option>
+                    <option value="Nữ">Nữ</option>
+                    <option value="Khác">Khác</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Số điện thoại <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="SDT" placeholder="0912345678" required>
+                <small class="text-muted">Số điện thoại phải bắt đầu bằng 0 và có 9-10 chữ số</small>
+            </div>
             <div id="message" class="mb-3"></div>
             <button type="submit" class="btn btn-primary w-100"><i class="fas fa-save"></i> Thêm bệnh nhân</button>
         </form>
@@ -35,21 +51,24 @@
     document.getElementById('formThemBN').addEventListener('submit', async function(e) {
         e.preventDefault();
         const payload = {
-            MaBN: document.getElementById('MaBN').value.trim(),
             HoTen: document.getElementById('HoTen').value.trim(),
             NgaySinh: document.getElementById('NgaySinh').value,
             GioiTinh: document.getElementById('GioiTinh').value,
             SDT: document.getElementById('SDT').value.trim()
         };
         try {
-            const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const res = await fetch(API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
             const data = await res.json();
             const msg = document.getElementById('message');
             if (res.ok) {
-                msg.innerHTML = `<div class="alert alert-success">✅ Thêm thành công <strong>${data.HoTen}</strong></div>`;
+                msg.innerHTML = `<div class="alert alert-success">✅ Thêm thành công <strong>${data.HoTen}</strong> (Mã: ${data.MaBN})</div>`;
                 this.reset();
             } else {
-                msg.innerHTML = `<div class="alert alert-danger">❌ Lỗi: ${data.error || 'Không thêm được'}</div>`;
+                msg.innerHTML = `<div class="alert alert-danger">❌ ${data.error || 'Không thêm được'}</div>`;
             }
         } catch (err) {
             document.getElementById('message').innerHTML = '<div class="alert alert-danger">❌ Lỗi kết nối</div>';

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sửa thuốc</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <style>
+    body { background: #f4f7fc; }
+    .card-custom { max-width: 600px; margin: 40px auto; border: none; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
+    .form-control:focus { border-color: #0d6efd; box-shadow: 0 0 0 0.25rem rgba(13,110,253,0.2); }
+    .btn-primary { padding: 10px 40px; border-radius: 30px; font-weight: 600; }
+    .back-link { display: inline-block; margin: 20px 0 0 20px; color: #0d6efd; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <a href="quan-ly-kho.html" class="back-link"><i class="fas fa-arrow-left"></i> Quay lại</a>
+  <div class="card card-custom p-4 bg-white">
+    <h3 class="text-center mb-4"><i class="fas fa-pills text-primary"></i> Sửa thuốc</h3>
+    <form id="formSuaThuoc">
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Mã thuốc</label>
+        <input type="text" class="form-control" id="MaThuoc" readonly>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Tên thuốc <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="TenThuoc" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Đơn vị</label>
+        <input type="text" class="form-control" id="DonVi" value="Viên">
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Nhà sản xuất</label>
+        <input type="text" class="form-control" id="NhaSX">
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Đơn giá <span class="text-danger">*</span></label>
+        <input type="number" class="form-control" id="DonGia" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Tồn kho</label>
+        <input type="number" class="form-control" id="SoLuongTon" value="0">
+      </div>
+      <div id="message" class="mb-3"></div>
+      <button type="submit" class="btn btn-primary w-100"><i class="fas fa-save"></i> Cập nhật</button>
+    </form>
+  </div>
+</div>
+<script>
+  const API_BASE = 'http://localhost:5000/api/benh-nhan';
+  const urlParams = new URLSearchParams(window.location.search);
+  const maThuoc = urlParams.get('maThuoc');
+  if (!maThuoc) {
+    alert('Thiếu mã thuốc');
+    window.location.href = 'quan-ly-kho.html';
+  }
+
+  // Load dữ liệu thuốc
+  async function loadMedicine() {
+    try {
+      const res = await fetch(`${API_BASE}/thuoc`);
+      const medicines = await res.json();
+      const medicine = medicines.find(m => m.MaThuoc === maThuoc);
+      if (!medicine) {
+        alert('Không tìm thấy thuốc');
+        window.location.href = 'quan-ly-kho.html';
+        return;
+      }
+      document.getElementById('MaThuoc').value = medicine.MaThuoc;
+      document.getElementById('TenThuoc').value = medicine.TenThuoc;
+      document.getElementById('DonVi').value = medicine.DonVi || 'Viên';
+      document.getElementById('NhaSX').value = medicine.NhaSX || '';
+      document.getElementById('DonGia').value = medicine.DonGia;
+      document.getElementById('SoLuongTon').value = medicine.SoLuongTon || 0;
+    } catch (err) {
+      alert('Lỗi tải dữ liệu');
+    }
+  }
+
+  loadMedicine();
+
+  // Submit form
+  document.getElementById('formSuaThuoc').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const payload = {
+      TenThuoc: document.getElementById('TenThuoc').value.trim(),
+      DonVi: document.getElementById('DonVi').value.trim(),
+      NhaSX: document.getElementById('NhaSX').value.trim(),
+      DonGia: parseFloat(document.getElementById('DonGia').value),
+      SoLuongTon: parseInt(document.getElementById('SoLuongTon').value) || 0
+    };
+    try {
+      const res = await fetch(`${API_BASE}/thuoc/${maThuoc}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      const msg = document.getElementById('message');
+      if (res.ok) {
+        msg.innerHTML = `<div class="alert alert-success">✅ Cập nhật thành công</div>`;
+        setTimeout(() => window.location.href = 'quan-ly-kho.html', 1000);
+      } else {
+        msg.innerHTML = `<div class="alert alert-danger">❌ ${data.error || 'Không cập nhật được'}</div>`;
+      }
+    } catch (err) {
+      document.getElementById('message').innerHTML = '<div class="alert alert-danger">❌ Lỗi kết nối</div>';
+    }
+  });
+</script>
+</body>
+</html>

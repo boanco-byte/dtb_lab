@@ -27,7 +27,27 @@ router.get('/hom-nay', async (req, res) => {
       FROM "ChiTietDoanhThu"
       WHERE "NgayGhiNhan" = CURRENT_DATE
     `);
-    res.json({ tong: result.rows[0].tong });
+    res.json({ tong: parseFloat(result.rows[0].tong) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Doanh thu theo khoảng ngày
+router.get('/doanh-thu-ngay', async (req, res) => {
+  try {
+    const { tuNgay, denNgay } = req.query;
+    if (!tuNgay || !denNgay) {
+      return res.status(400).json({ error: 'Thiếu tham số tuNgay hoặc denNgay' });
+    }
+    const result = await pool.query(`
+      SELECT DATE("NgayGhiNhan") AS ngay, SUM("DoanhThu") AS tong
+      FROM "ChiTietDoanhThu"
+      WHERE "NgayGhiNhan" BETWEEN $1 AND $2
+      GROUP BY ngay
+      ORDER BY ngay ASC
+    `, [tuNgay, denNgay]);
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

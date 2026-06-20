@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tìm hóa đơn</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <style>
+    body { background: #f4f7fc; }
+    .card-custom { border: none; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); }
+    .invoice-item { border-left: 4px solid #0d6efd; }
+  </style>
+</head>
+<body>
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3><i class="fas fa-search text-primary"></i> Tìm hóa đơn</h3>
+    <a href="index.html" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left"></i> Quay lại</a>
+  </div>
+
+  <div class="card card-custom p-4">
+    <form id="searchForm" class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label fw-semibold">Ngày (để trống để xem 100 hóa đơn gần nhất)</label>
+        <input type="date" class="form-control" id="ngay">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-semibold">Trạng thái</label>
+        <select class="form-select" id="trangThai">
+          <option value="">-- Tất cả --</option>
+          <option value="Chưa thanh toán">Chưa thanh toán</option>
+          <option value="Đã thanh toán">Đã thanh toán</option>
+          <option value="Đã hủy">Đã hủy</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search"></i> Tìm</button>
+      </div>
+      <div class="col-md-2">
+        <button type="button" class="btn btn-outline-secondary w-100" onclick="resetSearch()"><i class="fas fa-undo"></i> Reset</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="resultContainer" class="mt-4">
+    <div class="text-center text-muted">Nhấn Tìm để xem 100 hóa đơn gần nhất hoặc theo ngày</div>
+  </div>
+</div>
+
+<!-- Modal chi tiết hóa đơn -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Chi tiết hóa đơn #<span id="detailMaHD"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="detailBody">
+        <p>Đang tải...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API_BASE = 'http://localhost:5000/api/thanh-toan';
+  let detailModalInstance;
+
+  document.addEventListener('DOMContentLoaded', function() {
+    detailModalInstance = new bootstrap.Modal(document.getElementById('detailModal'));
+    // Tự động tìm kiếm khi tải trang
+    document.getElementById('searchForm').dispatchEvent(new Event('submit'));
+  });
+
+  document.getElementById('searchForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const ngay = document.getElementById('ngay').value;
+    const trangThai = document.getElementById('trangThai').value;
+    let url = `${API_BASE}/theo-ngay?`;
+    if (ngay) {
+      url += `ngay=${ngay}`;
+    }
+    if (trangThai) {
+      url += `${ngay ? '&' : ''}trangThai=${encodeURIComponent(trangThai)}`;
+    }
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      renderInvoices(data, ngay || '100 hóa đơn gần nhất');
+    } catch (err) {
+      document.getElementById('resultContainer').innerHTML = `<div class="alert alert-danger">Lỗi tải dữ liệu: ${err.message}</div>`;
+    }
+  });
+
+  function renderInvoices(invoices, label) {
+    const container = document.getElementById('resultContainer');
+    if (!Array.isArray(invoices)) {
+      container.innerHTML = `<div class="alert alert-danger">Dữ liệu không hợp lệ</div>`;
+      return;
+    }
+    if (invoices.length === 0) {
+      container.innerHTML = `<div class="alert alert-info">Không có hóa đơn (${label})</div>`;
+      return;
+    }
+    container.innerHTML = `
+      <h5 class="mb-3">📋 Kết quả (${invoices.length} hóa đơn) - ${label}</h5>
+      <div class="row g-3">
+        ${invoices.map(hd => `
+          <div class="col-md-6">
+            <div class="card invoice-item p-3">
+              <div class="d-flex justify-content-between">
+                <div>
+                  <strong>${hd.ten_benh_nhan}</strong> <span class="badge bg-secondary">${hd.MaBN}</span><br>
+                  <small class="text-muted">Mã HD: ${hd.MaHD}</small><br>
+                  <span class="badge bg-${hd.TrangThai === 'Đã thanh toán' ? 'success' : hd.TrangThai === 'Chưa thanh toán' ? 'warning' : 'danger'}">${hd.TrangThai}</span>
+                </div>
+                <div class="text-end">
+                  <h5 class="text-primary">${new Intl.NumberFormat('vi-VN').format(hd.TongTien)} VND</h5>
+                  <button class="btn btn-info btn-sm" onclick="xemChiTiet(${hd.MaHD})"><i class="fas fa-eye"></i> Chi tiết</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  async function xemChiTiet(maHD) {
+    try {
+      const res = await fetch(`${API_BASE}/${maHD}`);
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      document.getElementById('detailMaHD').textContent = maHD;
+      const body = document.getElementById('detailBody');
+      body.innerHTML = `
+        <div class="row mb-3">
+          <div class="col-md-6"><strong>Bệnh nhân:</strong> ${data.ten_benh_nhan} (${data.MaBN})</div>
+          <div class="col-md-6"><strong>Ngày xuất:</strong> ${new Date(data.NgayXuat).toLocaleString('vi-VN')}</div>
+          <div class="col-md-6"><strong>Tổng tiền:</strong> ${new Intl.NumberFormat('vi-VN').format(data.TongTien)} VND</div>
+          <div class="col-md-6"><strong>Phương thức:</strong> ${data.PhuongThuc}</div>
+          <div class="col-md-6"><strong>Trạng thái:</strong> ${data.TrangThai}</div>
+          <div class="col-md-6"><strong>Tiền khám:</strong> ${new Intl.NumberFormat('vi-VN').format(data.TienKham)} VND</div>
+          <div class="col-md-6"><strong>Tiền thuốc:</strong> ${new Intl.NumberFormat('vi-VN').format(data.TienThuoc)} VND</div>
+        </div>
+        ${data.chi_tiet && data.chi_tiet.length > 0 ? `
+          <h6>Chi tiết đơn thuốc:</h6>
+          <table class="table table-sm table-bordered">
+            <thead><tr><th>Tên thuốc</th><th>Số lượng</th><th>Đơn giá</th><th>Liều dùng</th></tr></thead>
+            <tbody>
+              ${data.chi_tiet.map(d => `
+                <tr>
+                  <td>${d.TenThuoc}</td>
+                  <td>${d.SoLuong} ${d.DonVi || ''}</td>
+                  <td>${new Intl.NumberFormat('vi-VN').format(d.DonGia)} VND</td>
+                  <td>${d.LieuDung || ''}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        ` : `<p class="text-muted">Không có chi tiết thuốc</p>`}
+      `;
+      detailModalInstance.show();
+    } catch (err) {
+      alert('Lỗi tải chi tiết hóa đơn: ' + err.message);
+    }
+  }
+
+  function resetSearch() {
+    document.getElementById('ngay').value = '';
+    document.getElementById('trangThai').value = '';
+    document.getElementById('resultContainer').innerHTML = '<div class="text-center text-muted">Nhấn Tìm để xem 100 hóa đơn gần nhất hoặc theo ngày</div>';
+  }
+</script>
+</body>
+</html>
