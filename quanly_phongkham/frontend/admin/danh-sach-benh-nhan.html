@@ -14,7 +14,6 @@
         .btn-primary { background: #0d6efd; border: none; border-radius: 30px; padding: 8px 20px; font-weight: 600; }
         .btn-primary:hover { background: #0b5ed7; }
         .btn-outline-secondary { border-radius: 30px; }
-        .badge-status { padding: 6px 12px; border-radius: 20px; }
     </style>
 </head>
 <body>
@@ -59,7 +58,6 @@
         try {
             const res = await fetch(API);
             let data = await res.json();
-            // Sắp xếp theo mã giảm dần để lấy mới nhất
             data.sort((a, b) => b.MaBN.localeCompare(a.MaBN));
             patients = data.slice(0, 100);
             render(patients);
@@ -82,22 +80,12 @@
                 <td>${p.GioiTinh}</td>
                 <td>${p.SDT}</td>
                 <td>
-                    <button class="btn btn-info btn-sm" onclick="xemBenhAn('${p.MaBN}')"><i class="fas fa-notes-medical"></i> Bệnh án</button>
-                    <button class="btn btn-warning btn-sm" onclick="suaBenhNhan('${p.MaBN}')"><i class="fas fa-edit"></i></button>
+                    <a href="benh-an-theo-benh-nhan.html?maBN=${p.MaBN}" class="btn btn-info btn-sm"><i class="fas fa-notes-medical"></i> Bệnh án</a>
+                    <a href="sua-benh-nhan.html?maBN=${p.MaBN}" class="btn btn-warning btn-sm"><i class="fas fa-edit"></i></a>
                     <button class="btn btn-danger btn-sm" onclick="xoaBenhNhan('${p.MaBN}')"><i class="fas fa-trash"></i></button>
                 </td>
             </tr>
         `).join('');
-    }
-
-    function suaBenhNhan(maBN) {
-        // Chuyển đến trang sửa (có thể mở modal hoặc redirect)
-        alert('Chức năng sửa đang phát triển. Vui lòng sử dụng API trực tiếp.');
-    }
-
-    function xemBenhAn(maBN) {
-        // Chuyển đến trang bệnh án của bệnh nhân
-        window.location.href = `benh-an-theo-benh-nhan.html?maBN=${maBN}`;
     }
 
     async function xoaBenhNhan(maBN) {

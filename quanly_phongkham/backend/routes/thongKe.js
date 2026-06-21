@@ -33,7 +33,7 @@ router.get('/hom-nay', async (req, res) => {
   }
 });
 
-// Doanh thu theo khoảng ngày
+// Doanh thu theo khoảng ngày (lấy tất cả loại)
 router.get('/doanh-thu-ngay', async (req, res) => {
   try {
     const { tuNgay, denNgay } = req.query;
@@ -53,4 +53,22 @@ router.get('/doanh-thu-ngay', async (req, res) => {
   }
 });
 
-module.exports = router;
+// (Tùy chọn) Doanh thu theo loại
+router.get('/doanh-thu-ngay-theo-loai', async (req, res) => {
+  try {
+    const { tuNgay, denNgay, loai } = req.query;
+    if (!tuNgay || !denNgay || !loai) {
+      return res.status(400).json({ error: 'Thiếu tham số' });
+    }
+    const result = await pool.query(`
+      SELECT DATE("NgayGhiNhan") AS ngay, SUM("DoanhThu") AS tong
+      FROM "ChiTietDoanhThu"
+      WHERE "NgayGhiNhan" BETWEEN $1 AND $2 AND "Loai" = $3
+      GROUP BY ngay
+      ORDER BY ngay ASC
+    `, [tuNgay, denNgay, loai]);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});

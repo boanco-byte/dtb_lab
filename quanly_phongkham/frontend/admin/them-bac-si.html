@@ -30,10 +30,6 @@
                 <input type="text" class="form-control" id="HoTen" placeholder="Nguyễn Văn E" required>
             </div>
             <div class="mb-3">
-                <label class="form-label fw-semibold">Chuyên khoa <span class="text-danger">*</span></label>
-                <input type="text" class="form-control" id="ChuyenKhoa" placeholder="VD: Nội tổng quát" required>
-            </div>
-            <div class="mb-3">
                 <label class="form-label fw-semibold">Số điện thoại</label>
                 <input type="text" class="form-control" id="SDT" placeholder="0912345678">
             </div>
@@ -53,16 +49,15 @@
         e.preventDefault();
         const MaBS = document.getElementById('MaBS').value.trim();
         const HoTen = document.getElementById('HoTen').value.trim();
-        const ChuyenKhoa = document.getElementById('ChuyenKhoa').value.trim();
         const SDT = document.getElementById('SDT').value.trim();
         const MaPK = document.getElementById('MaPK').value ? parseInt(document.getElementById('MaPK').value) : null;
 
-        if (!MaBS || !HoTen || !ChuyenKhoa) {
+        if (!MaBS || !HoTen) {
             document.getElementById('message').innerHTML = '<div class="alert alert-warning">Vui lòng điền đầy đủ thông tin bắt buộc (*)</div>';
             return;
         }
 
-        const payload = { MaBS, HoTen, ChuyenKhoa, SDT, MaPK };
+        const payload = { MaBS, HoTen, SDT, MaPK };
 
         try {
             const res = await fetch(API, {

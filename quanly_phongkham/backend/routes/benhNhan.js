@@ -3,10 +3,8 @@ const router = express.Router();
 const pool = require('../db');
 
 // ============================================================
-// 1. QUẢN LÝ BỆNH NHÂN – CÁC ROUTE CỤ THỂ (ĐẶT TRƯỚC ROUTE ĐỘNG)
+// 1. QUẢN LÝ BỆNH NHÂN
 // ============================================================
-
-// Lấy danh sách bệnh nhân (có hỗ trợ tìm kiếm)
 router.get('/', async (req, res) => {
   try {
     const { search } = req.query;
@@ -24,7 +22,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Tìm theo số điện thoại
 router.get('/sdt/:sdt', async (req, res) => {
   try {
     const { sdt } = req.params;
@@ -35,30 +32,24 @@ router.get('/sdt/:sdt', async (req, res) => {
   }
 });
 
-// Thêm bệnh nhân mới (tự động tạo tài khoản đăng nhập)
 router.post('/', async (req, res) => {
   try {
     const { HoTen, NgaySinh, GioiTinh, SDT } = req.body;
-
     await pool.query('BEGIN');
-
     const countResult = await pool.query('SELECT COUNT(*) FROM "BenhNhan"');
     const count = parseInt(countResult.rows[0].count) + 1;
     const MaBN = 'BN' + String(count).padStart(5, '0');
-
     const result = await pool.query(
       `INSERT INTO "BenhNhan" ("MaBN", "HoTen", "NgaySinh", "GioiTinh", "SDT")
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [MaBN, HoTen, NgaySinh, GioiTinh, SDT]
     );
-
     const matKhauMacDinh = '123456';
     await pool.query(
       `INSERT INTO "TaiKhoanBenhNhan" ("MaBN", "MatKhauHash")
        VALUES ($1, crypt($2, gen_salt('bf')))`,
       [MaBN, matKhauMacDinh]
     );
-
     await pool.query('COMMIT');
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -74,14 +65,12 @@ router.post('/', async (req, res) => {
 });
 
 // ============================================================
-// 2. QUẢN LÝ BÁC SĨ (cho admin)
+// 2. QUẢN LÝ BÁC SĨ (không có ChuyenKhoa)
 // ============================================================
-
-// Lấy danh sách bác sĩ (có kèm số lượng lịch hẹn trong ngày)
 router.get('/bac-si', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT bs.*, pk."TenPhong",
+      SELECT bs."MaBS", bs."HoTen", bs."SDT", bs."MaPK", pk."TenPhong",
              (SELECT COUNT(*) FROM "LichHen" WHERE "MaBS" = bs."MaBS" AND DATE("ThoiGianBatDau") = CURRENT_DATE) AS so_lich_hnay
       FROM "BacSi" bs
       LEFT JOIN "PhongKham" pk ON bs."MaPK" = pk."MaPK"
@@ -94,31 +83,14 @@ router.get('/bac-si', async (req, res) => {
   }
 });
 
-// Lấy danh sách ca làm việc của một bác sĩ (theo khoảng ngày)
 router.get('/bac-si/:maBS/ca-lam-viec', async (req, res) => {
   try {
     const { maBS } = req.params;
-    const { tuNgay, denNgay } = req.query;
-    let ngayBatDau, ngayKetThuc;
-    if (tuNgay && denNgay) {
-      ngayBatDau = tuNgay;
-      ngayKetThuc = denNgay;
-    } else {
-      // Mặc định lấy 7 ngày từ hôm nay
-      const today = new Date();
-      const start = new Date(today);
-      start.setDate(today.getDate() - today.getDay()); // Đầu tuần (Chủ nhật)
-      const end = new Date(start);
-      end.setDate(start.getDate() + 6);
-      ngayBatDau = start.toISOString().slice(0, 10);
-      ngayKetThuc = end.toISOString().slice(0, 10);
-    }
-
+    const { ngay } = req.query;
+    const ngayLam = ngay || new Date().toISOString().slice(0, 10);
     const result = await pool.query(
-      `SELECT * FROM "CaLamViec"
-       WHERE "MaBS" = $1 AND "NgayLam" BETWEEN $2 AND $3
-       ORDER BY "NgayLam", "BatDau"`,
-      [maBS, ngayBatDau, ngayKetThuc]
+      `SELECT * FROM "CaLamViec" WHERE "MaBS" = $1 AND "NgayLam" = $2 ORDER BY "BatDau"`,
+      [maBS, ngayLam]
     );
     res.json(result.rows);
   } catch (err) {
@@ -127,32 +99,18 @@ router.get('/bac-si/:maBS/ca-lam-viec', async (req, res) => {
   }
 });
 
-// Lấy danh sách lịch hẹn của một bác sĩ (theo khoảng ngày)
 router.get('/bac-si/:maBS/lich-hen', async (req, res) => {
   try {
     const { maBS } = req.params;
-    const { tuNgay, denNgay } = req.query;
-    let ngayBatDau, ngayKetThuc;
-    if (tuNgay && denNgay) {
-      ngayBatDau = tuNgay;
-      ngayKetThuc = denNgay;
-    } else {
-      const today = new Date();
-      const start = new Date(today);
-      start.setDate(today.getDate() - today.getDay());
-      const end = new Date(start);
-      end.setDate(start.getDate() + 6);
-      ngayBatDau = start.toISOString().slice(0, 10);
-      ngayKetThuc = end.toISOString().slice(0, 10);
-    }
-
+    const { ngay } = req.query;
+    const ngayLam = ngay || new Date().toISOString().slice(0, 10);
     const result = await pool.query(
       `SELECT lh.*, bn."HoTen" AS ten_benh_nhan
        FROM "LichHen" lh
        JOIN "BenhNhan" bn ON lh."MaBN" = bn."MaBN"
-       WHERE lh."MaBS" = $1 AND DATE(lh."ThoiGianBatDau") BETWEEN $2 AND $3
+       WHERE lh."MaBS" = $1 AND DATE(lh."ThoiGianBatDau") = $2
        ORDER BY lh."ThoiGianBatDau"`,
-      [maBS, ngayBatDau, ngayKetThuc]
+      [maBS, ngayLam]
     );
     res.json(result.rows);
   } catch (err) {
@@ -161,17 +119,13 @@ router.get('/bac-si/:maBS/lich-hen', async (req, res) => {
   }
 });
 
-// Cập nhật bác sĩ
 router.put('/bac-si/:maBS', async (req, res) => {
   try {
     const { maBS } = req.params;
-    const { HoTen, ChuyenKhoa, SDT, MaPK } = req.body;
+    const { HoTen, SDT, MaPK } = req.body;
     const result = await pool.query(
-      `UPDATE "BacSi"
-       SET "HoTen" = $1, "ChuyenKhoa" = $2, "SDT" = $3, "MaPK" = $4
-       WHERE "MaBS" = $5
-       RETURNING *`,
-      [HoTen, ChuyenKhoa, SDT, MaPK, maBS]
+      `UPDATE "BacSi" SET "HoTen" = $1, "SDT" = $2, "MaPK" = $3 WHERE "MaBS" = $4 RETURNING *`,
+      [HoTen, SDT, MaPK, maBS]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Không tìm thấy bác sĩ' });
@@ -182,12 +136,11 @@ router.put('/bac-si/:maBS', async (req, res) => {
   }
 });
 
-// Thêm mới bác sĩ
 router.post('/bac-si', async (req, res) => {
   try {
-    const { MaBS, HoTen, ChuyenKhoa, SDT, MaPK } = req.body;
-    if (!MaBS || !HoTen || !ChuyenKhoa) {
-      return res.status(400).json({ error: 'Thiếu thông tin bắt buộc (MaBS, HoTen, ChuyenKhoa)' });
+    const { MaBS, HoTen, SDT, MaPK } = req.body;
+    if (!MaBS || !HoTen) {
+      return res.status(400).json({ error: 'Thiếu thông tin bắt buộc (MaBS, HoTen)' });
     }
     if (MaPK) {
       const check = await pool.query('SELECT 1 FROM "PhongKham" WHERE "MaPK" = $1', [MaPK]);
@@ -196,9 +149,8 @@ router.post('/bac-si', async (req, res) => {
       }
     }
     const result = await pool.query(
-      `INSERT INTO "BacSi" ("MaBS", "HoTen", "ChuyenKhoa", "SDT", "MaPK")
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [MaBS, HoTen, ChuyenKhoa, SDT, MaPK || null]
+      `INSERT INTO "BacSi" ("MaBS", "HoTen", "SDT", "MaPK") VALUES ($1, $2, $3, $4) RETURNING *`,
+      [MaBS, HoTen, SDT, MaPK || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -210,14 +162,10 @@ router.post('/bac-si', async (req, res) => {
   }
 });
 
-// Xóa bác sĩ
 router.delete('/bac-si/:maBS', async (req, res) => {
   try {
     const { maBS } = req.params;
-    const check = await pool.query(
-      `SELECT EXISTS (SELECT 1 FROM "LichHen" WHERE "MaBS" = $1)`,
-      [maBS]
-    );
+    const check = await pool.query(`SELECT EXISTS (SELECT 1 FROM "LichHen" WHERE "MaBS" = $1)`, [maBS]);
     if (check.rows[0].exists) {
       return res.status(400).json({ error: 'Không thể xóa bác sĩ đã có lịch hẹn!' });
     }
@@ -229,10 +177,8 @@ router.delete('/bac-si/:maBS', async (req, res) => {
 });
 
 // ============================================================
-// 3. QUẢN LÝ KHO THUỐC (cho admin)
+// 3. QUẢN LÝ KHO THUỐC
 // ============================================================
-
-// Lấy danh sách thuốc
 router.get('/thuoc', async (req, res) => {
   try {
     const result = await pool.query(`SELECT * FROM "Thuoc" ORDER BY "TenThuoc"`);
@@ -243,16 +189,12 @@ router.get('/thuoc', async (req, res) => {
   }
 });
 
-// Cập nhật thuốc
 router.put('/thuoc/:maThuoc', async (req, res) => {
   try {
     const { maThuoc } = req.params;
     const { TenThuoc, DonVi, NhaSX, DonGia, SoLuongTon } = req.body;
     const result = await pool.query(
-      `UPDATE "Thuoc"
-       SET "TenThuoc" = $1, "DonVi" = $2, "NhaSX" = $3, "DonGia" = $4, "SoLuongTon" = $5
-       WHERE "MaThuoc" = $6
-       RETURNING *`,
+      `UPDATE "Thuoc" SET "TenThuoc" = $1, "DonVi" = $2, "NhaSX" = $3, "DonGia" = $4, "SoLuongTon" = $5 WHERE "MaThuoc" = $6 RETURNING *`,
       [TenThuoc, DonVi, NhaSX, DonGia, SoLuongTon, maThuoc]
     );
     if (result.rows.length === 0) {
@@ -264,7 +206,6 @@ router.put('/thuoc/:maThuoc', async (req, res) => {
   }
 });
 
-// Thêm mới thuốc
 router.post('/thuoc', async (req, res) => {
   try {
     const { MaThuoc, TenThuoc, DonVi, NhaSX, DonGia, SoLuongTon } = req.body;
@@ -286,14 +227,10 @@ router.post('/thuoc', async (req, res) => {
   }
 });
 
-// Xóa thuốc
 router.delete('/thuoc/:maThuoc', async (req, res) => {
   try {
     const { maThuoc } = req.params;
-    const check = await pool.query(
-      `SELECT EXISTS (SELECT 1 FROM "DonThuoc" WHERE "MaThuoc" = $1)`,
-      [maThuoc]
-    );
+    const check = await pool.query(`SELECT EXISTS (SELECT 1 FROM "DonThuoc" WHERE "MaThuoc" = $1)`, [maThuoc]);
     if (check.rows[0].exists) {
       return res.status(400).json({ error: 'Không thể xóa thuốc đã được kê trong đơn!' });
     }
@@ -307,8 +244,6 @@ router.delete('/thuoc/:maThuoc', async (req, res) => {
 // ============================================================
 // 4. QUẢN LÝ BỆNH ÁN
 // ============================================================
-
-// Lấy danh sách bệnh án (có thể lọc theo MaBN)
 router.get('/benh-an', async (req, res) => {
   try {
     const { maBN } = req.query;
@@ -334,7 +269,6 @@ router.get('/benh-an', async (req, res) => {
   }
 });
 
-// Lấy chi tiết bệnh án (kèm đơn thuốc)
 router.get('/benh-an/:maBA', async (req, res) => {
   try {
     const { maBA } = req.params;
@@ -366,7 +300,6 @@ router.get('/benh-an/:maBA', async (req, res) => {
   }
 });
 
-// Tạo bệnh án mới
 router.post('/benh-an', async (req, res) => {
   try {
     const { MaLH, ChanDoan, TrieuChung, GhiChu } = req.body;
@@ -391,16 +324,12 @@ router.post('/benh-an', async (req, res) => {
   }
 });
 
-// Cập nhật bệnh án
 router.put('/benh-an/:maBA', async (req, res) => {
   try {
     const { maBA } = req.params;
     const { ChanDoan, TrieuChung, GhiChu } = req.body;
     const result = await pool.query(
-      `UPDATE "BenhAn"
-       SET "ChanDoan" = $1, "TrieuChung" = $2, "GhiChu" = $3
-       WHERE "MaBA" = $4
-       RETURNING *`,
+      `UPDATE "BenhAn" SET "ChanDoan" = $1, "TrieuChung" = $2, "GhiChu" = $3 WHERE "MaBA" = $4 RETURNING *`,
       [ChanDoan, TrieuChung, GhiChu, maBA]
     );
     if (result.rows.length === 0) {
@@ -412,21 +341,14 @@ router.put('/benh-an/:maBA', async (req, res) => {
   }
 });
 
-// Xóa bệnh án
 router.delete('/benh-an/:maBA', async (req, res) => {
   try {
     const { maBA } = req.params;
-    const check = await pool.query(
-      `SELECT EXISTS (SELECT 1 FROM "DonThuoc" WHERE "MaBA" = $1)`,
-      [maBA]
-    );
+    const check = await pool.query(`SELECT EXISTS (SELECT 1 FROM "DonThuoc" WHERE "MaBA" = $1)`, [maBA]);
     if (check.rows[0].exists) {
       return res.status(400).json({ error: 'Không thể xóa bệnh án đã có đơn thuốc' });
     }
-    const checkInvoice = await pool.query(
-      `SELECT EXISTS (SELECT 1 FROM "HoaDon" WHERE "MaBA" = $1)`,
-      [maBA]
-    );
+    const checkInvoice = await pool.query(`SELECT EXISTS (SELECT 1 FROM "HoaDon" WHERE "MaBA" = $1)`, [maBA]);
     if (checkInvoice.rows[0].exists) {
       return res.status(400).json({ error: 'Không thể xóa bệnh án đã có hóa đơn' });
     }
@@ -440,8 +362,6 @@ router.delete('/benh-an/:maBA', async (req, res) => {
 // ============================================================
 // 5. CÁC ROUTE ĐỘNG (PHẢI ĐẶT SAU CÁC ROUTE CỤ THỂ)
 // ============================================================
-
-// Lấy thông tin một bệnh nhân theo mã
 router.get('/:maBN', async (req, res) => {
   try {
     const { maBN } = req.params;
@@ -455,16 +375,12 @@ router.get('/:maBN', async (req, res) => {
   }
 });
 
-// Cập nhật bệnh nhân
 router.put('/:maBN', async (req, res) => {
   try {
     const { maBN } = req.params;
     const { HoTen, NgaySinh, GioiTinh, SDT } = req.body;
     const result = await pool.query(
-      `UPDATE "BenhNhan"
-       SET "HoTen" = $1, "NgaySinh" = $2, "GioiTinh" = $3, "SDT" = $4
-       WHERE "MaBN" = $5
-       RETURNING *`,
+      `UPDATE "BenhNhan" SET "HoTen" = $1, "NgaySinh" = $2, "GioiTinh" = $3, "SDT" = $4 WHERE "MaBN" = $5 RETURNING *`,
       [HoTen, NgaySinh, GioiTinh, SDT, maBN]
     );
     if (result.rows.length === 0) {
@@ -480,14 +396,10 @@ router.put('/:maBN', async (req, res) => {
   }
 });
 
-// Xóa bệnh nhân
 router.delete('/:maBN', async (req, res) => {
   try {
     const { maBN } = req.params;
-    const check = await pool.query(
-      `SELECT EXISTS (SELECT 1 FROM "LichHen" WHERE "MaBN" = $1)`,
-      [maBN]
-    );
+    const check = await pool.query(`SELECT EXISTS (SELECT 1 FROM "LichHen" WHERE "MaBN" = $1)`, [maBN]);
     if (check.rows[0].exists) {
       return res.status(400).json({ error: 'Không thể xóa bệnh nhân đã có lịch hẹn!' });
     }
@@ -498,7 +410,6 @@ router.delete('/:maBN', async (req, res) => {
   }
 });
 
-// Lấy bệnh án + đơn thuốc của một bệnh nhân
 router.get('/:maBN/benh-an', async (req, res) => {
   try {
     const { maBN } = req.params;
@@ -506,10 +417,8 @@ router.get('/:maBN/benh-an', async (req, res) => {
     if (bnCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Không tìm thấy bệnh nhân' });
     }
-
     const result = await pool.query(
-      `SELECT ba.*, bs."HoTen" AS ten_bac_si,
-              lh."ThoiGianBatDau"
+      `SELECT ba.*, bs."HoTen" AS ten_bac_si, lh."ThoiGianBatDau"
        FROM "BenhAn" ba
        LEFT JOIN "LichHen" lh ON ba."MaLH" = lh."MaLH"
        LEFT JOIN "BacSi" bs ON lh."MaBS" = bs."MaBS"
@@ -518,18 +427,13 @@ router.get('/:maBN/benh-an', async (req, res) => {
       [maBN]
     );
     const benhAns = result.rows;
-
     for (let ba of benhAns) {
       const thuocResult = await pool.query(
-        `SELECT dt.*, t."TenThuoc", t."DonGia"
-         FROM "DonThuoc" dt
-         JOIN "Thuoc" t ON dt."MaThuoc" = t."MaThuoc"
-         WHERE dt."MaBA" = $1`,
+        `SELECT dt.*, t."TenThuoc", t."DonGia" FROM "DonThuoc" dt JOIN "Thuoc" t ON dt."MaThuoc" = t."MaThuoc" WHERE dt."MaBA" = $1`,
         [ba.MaBA]
       );
       ba.don_thuoc = thuocResult.rows;
     }
-
     res.json(benhAns);
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -18,7 +18,6 @@
         .lich-hen-item { border-left: 4px solid #0d6efd; padding-left: 12px; margin-bottom: 8px; }
         .lich-hen-item.busy { border-left-color: #dc3545; background-color: #fff5f5; }
         .lich-hen-item.free { border-left-color: #28a745; background-color: #f0fff4; }
-        .badge-status { padding: 6px 12px; border-radius: 20px; }
     </style>
 </head>
 <body>
@@ -42,21 +41,20 @@
                     <tr>
                         <th>Mã BS</th>
                         <th>Họ tên</th>
-                        <th>Chuyên khoa</th>
                         <th>SĐT</th>
                         <th>Phòng khám</th>
                         <th>Hành động</th>
                     </tr>
                 </thead>
                 <tbody id="doctorTableBody">
-                    <tr><td colspan="6" class="text-center text-muted">Đang tải...</td></tr>
+                    <tr><td colspan="5" class="text-center text-muted">Đang tải...</td></tr>
                 </tbody>
             </table>
         </div>
     </div>
 </div>
 
-<!-- Modal xem lịch làm việc của bác sĩ -->
+<!-- Modal xem lịch làm việc -->
 <div class="modal fade" id="scheduleModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -107,21 +105,20 @@
             doctors = data.slice(0, 100);
             render(doctors);
         } catch {
-            document.getElementById('doctorTableBody').innerHTML = `<tr><td colspan="6" class="text-danger text-center">Lỗi tải dữ liệu</td></tr>`;
+            document.getElementById('doctorTableBody').innerHTML = `<tr><td colspan="5" class="text-danger text-center">Lỗi tải dữ liệu</td></tr>`;
         }
     }
 
     function render(list) {
         const tbody = document.getElementById('doctorTableBody');
         if (list.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Không có bác sĩ</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Không có bác sĩ</td></tr>`;
             return;
         }
         tbody.innerHTML = list.map(d => `
             <tr>
                 <td><span class="badge bg-primary">${d.MaBS}</span></td>
                 <td><strong>${d.HoTen}</strong></td>
-                <td>${d.ChuyenKhoa}</td>
                 <td>${d.SDT}</td>
                 <td>${d.TenPhong || 'Chưa phân công'}</td>
                 <td>
@@ -133,89 +130,65 @@
         `).join('');
     }
 
-    // Xem lịch làm việc
-async function xemLichLamViec(maBS) {
-    const doctor = doctors.find(d => d.MaBS === maBS);
-    document.getElementById('doctorName').textContent = doctor ? `- ${doctor.HoTen}` : '';
+    async function xemLichLamViec(maBS) {
+        const doctor = doctors.find(d => d.MaBS === maBS);
+        document.getElementById('doctorName').textContent = doctor ? `- ${doctor.HoTen}` : '';
 
-    // Tính tuần hiện tại (từ Chủ nhật đến Thứ 7)
-    const today = new Date();
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - today.getDay()); // Chủ nhật
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6); // Thứ 7
-    const tuNgay = startOfWeek.toISOString().slice(0, 10);
-    const denNgay = endOfWeek.toISOString().slice(0, 10);
-
-    // Lấy ca làm việc trong tuần
-    try {
-        const resCal = await fetch(`http://localhost:5000/api/benh-nhan/bac-si/${maBS}/ca-lam-viec?tuNgay=${tuNgay}&denNgay=${denNgay}`);
-        const calData = await resCal.json();
-        const calContainer = document.getElementById('caLamViecList');
-        if (calData.length === 0) {
-            calContainer.innerHTML = '<p class="text-muted">Bác sĩ chưa có ca làm việc trong tuần này.</p>';
-        } else {
-            // Nhóm theo ngày
-            const grouped = calData.reduce((acc, cur) => {
-                const ngay = cur.NgayLam;
-                if (!acc[ngay]) acc[ngay] = [];
-                acc[ngay].push(cur);
-                return acc;
-            }, {});
-            let html = `<div class="table-responsive"><table class="table table-sm table-bordered"><thead class="table-light"><tr><th>Ngày</th><th>Ca làm việc</th></tr></thead><tbody>`;
-            // Sắp xếp các ngày từ tuNgay đến denNgay
-            for (let d = new Date(tuNgay); d <= new Date(denNgay); d.setDate(d.getDate() + 1)) {
-                const ngayStr = d.toISOString().slice(0, 10);
-                const list = grouped[ngayStr] || [];
-                const ngayDisplay = d.toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
-                if (list.length === 0) {
-                    html += `<tr><td>${ngayDisplay}</td><td class="text-muted">Không có ca</td></tr>`;
-                } else {
-                    html += `<tr><td>${ngayDisplay}</td><td>${list.map(c => `${c.BatDau} - ${c.KetThuc}`).join(', ')}</td></tr>`;
-                }
+        try {
+            const resCal = await fetch(`http://localhost:5000/api/benh-nhan/bac-si/${maBS}/ca-lam-viec`);
+            const calData = await resCal.json();
+            const calContainer = document.getElementById('caLamViecList');
+            if (calData.length === 0) {
+                calContainer.innerHTML = '<p class="text-muted">Bác sĩ chưa có ca làm việc nào.</p>';
+            } else {
+                calContainer.innerHTML = `
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead class="table-light"><tr><th>Ngày</th><th>Bắt đầu</th><th>Kết thúc</th></tr></thead>
+                            <tbody>
+                                ${calData.map(c => `
+                                    <tr>
+                                        <td>${new Date(c.NgayLam).toLocaleDateString('vi-VN')}</td>
+                                        <td>${c.BatDau}</td>
+                                        <td>${c.KetThuc}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
             }
-            html += `</tbody></table></div>`;
-            calContainer.innerHTML = html;
+        } catch (err) {
+            document.getElementById('caLamViecList').innerHTML = `<p class="text-danger">Lỗi tải ca làm việc: ${err.message}</p>`;
         }
-    } catch (err) {
-        document.getElementById('caLamViecList').innerHTML = `<p class="text-danger">Lỗi tải ca làm việc: ${err.message}</p>`;
-    }
 
-    // Lấy lịch hẹn trong tuần
-    try {
-        const resApp = await fetch(`http://localhost:5000/api/benh-nhan/bac-si/${maBS}/lich-hen?tuNgay=${tuNgay}&denNgay=${denNgay}`);
-        const appData = await resApp.json();
-        const appContainer = document.getElementById('lichHenList');
-        if (appData.length === 0) {
-            appContainer.innerHTML = '<p class="text-muted">Bác sĩ chưa có lịch hẹn trong tuần này.</p>';
-        } else {
-            // Nhóm theo ngày
-            const grouped = appData.reduce((acc, cur) => {
-                const ngay = cur.ThoiGianBatDau.slice(0, 10);
-                if (!acc[ngay]) acc[ngay] = [];
-                acc[ngay].push(cur);
-                return acc;
-            }, {});
-            let html = `<div class="table-responsive"><table class="table table-sm table-bordered"><thead class="table-light"><tr><th>Ngày</th><th>Lịch hẹn</th></tr></thead><tbody>`;
-            for (let d = new Date(tuNgay); d <= new Date(denNgay); d.setDate(d.getDate() + 1)) {
-                const ngayStr = d.toISOString().slice(0, 10);
-                const list = grouped[ngayStr] || [];
-                const ngayDisplay = d.toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
-                if (list.length === 0) {
-                    html += `<tr><td>${ngayDisplay}</td><td class="text-muted">Không có lịch hẹn</td></tr>`;
-                } else {
-                    html += `<tr><td>${ngayDisplay}</td><td>${list.map(l => `<div class="lich-hen-item ${l.TrangThai === 'Đã hủy' ? 'free' : 'busy'}"><strong>${l.ten_benh_nhan}</strong> (${new Date(l.ThoiGianBatDau).toLocaleTimeString('vi-VN')} - ${new Date(l.ThoiGianKetThuc).toLocaleTimeString('vi-VN')}) <span class="badge bg-${l.TrangThai === 'Đã khám' ? 'success' : l.TrangThai === 'Đang khám' ? 'warning' : l.TrangThai === 'Đã hủy' ? 'secondary' : 'danger'}">${l.TrangThai}</span></div>`).join('')}</td></tr>`;
-                }
+        try {
+            const resApp = await fetch(`http://localhost:5000/api/benh-nhan/bac-si/${maBS}/lich-hen`);
+            const appData = await resApp.json();
+            const appContainer = document.getElementById('lichHenList');
+            if (appData.length === 0) {
+                appContainer.innerHTML = '<p class="text-muted">Bác sĩ chưa có lịch hẹn nào.</p>';
+            } else {
+                appContainer.innerHTML = appData.map(l => `
+                    <div class="lich-hen-item ${l.TrangThai === 'Đã hủy' ? 'free' : 'busy'}">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <strong>${l.ten_benh_nhan}</strong><br>
+                                <small>${new Date(l.ThoiGianBatDau).toLocaleString('vi-VN')} - ${new Date(l.ThoiGianKetThuc).toLocaleString('vi-VN')}</small>
+                            </div>
+                            <div>
+                                <span class="badge bg-${l.TrangThai === 'Đã khám' ? 'success' : l.TrangThai === 'Đang khám' ? 'warning' : l.TrangThai === 'Đã hủy' ? 'secondary' : 'danger'}">${l.TrangThai}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
             }
-            html += `</tbody></table></div>`;
-            appContainer.innerHTML = html;
+        } catch (err) {
+            document.getElementById('lichHenList').innerHTML = `<p class="text-danger">Lỗi tải lịch hẹn: ${err.message}</p>`;
         }
-    } catch (err) {
-        document.getElementById('lichHenList').innerHTML = `<p class="text-danger">Lỗi tải lịch hẹn: ${err.message}</p>`;
-    }
 
-    scheduleModalInstance.show();
-}
+        scheduleModalInstance.show();
+    }
 
     async function xoaBacSi(maBS) {
         if (!confirm(`Xóa bác sĩ ${maBS}?`)) return;

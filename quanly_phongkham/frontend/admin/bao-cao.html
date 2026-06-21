@@ -61,7 +61,16 @@
         document.getElementById('doanhThuNgayResult').innerHTML = '<div class="alert alert-info">Không có doanh thu trong khoảng này</div>';
         return;
       }
-      const tong = data.reduce((sum, item) => sum + item.tong, 0);
+
+      // ---- SỬA LỖI TÍNH TỔNG ----
+      let tong = 0;
+      data.forEach(item => {
+        const value = parseFloat(item.tong);
+        if (!isNaN(value)) {
+          tong += value;
+        }
+      });
+
       document.getElementById('doanhThuNgayResult').innerHTML = `
         <div class="alert alert-success">
           <h6>Tổng doanh thu từ ${tuNgay} đến ${denNgay}</h6>
@@ -71,12 +80,15 @@
             <table class="table table-sm">
               <thead><tr><th>Ngày</th><th>Doanh thu</th></tr></thead>
               <tbody>
-                ${data.map(d => `
-                  <tr>
-                    <td>${new Date(d.ngay).toLocaleDateString('vi-VN')}</td>
-                    <td>${new Intl.NumberFormat('vi-VN').format(d.tong)} VND</td>
-                  </tr>
-                `).join('')}
+                ${data.map(d => {
+                  const dayTotal = parseFloat(d.tong);
+                  return `
+                    <tr>
+                      <td>${new Date(d.ngay).toLocaleDateString('vi-VN')}</td>
+                      <td>${isNaN(dayTotal) ? '0' : new Intl.NumberFormat('vi-VN').format(dayTotal)} VND</td>
+                    </tr>
+                  `;
+                }).join('')}
               </tbody>
             </table>
           </div>

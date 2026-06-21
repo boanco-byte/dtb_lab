@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 
-// Middleware kiểm tra bệnh nhân
 router.use((req, res, next) => {
   const maBN = req.headers['x-mabn'];
   if (!maBN) {
@@ -12,11 +11,7 @@ router.use((req, res, next) => {
   next();
 });
 
-// ============================================================
-// 1. LỊCH HẸN
-// ============================================================
-
-// Lấy danh sách lịch hẹn
+// Lịch hẹn
 router.get('/lich-hen', async (req, res) => {
   try {
     const result = await pool.query(
@@ -33,7 +28,6 @@ router.get('/lich-hen', async (req, res) => {
   }
 });
 
-// Đặt lịch mới
 router.post('/dat-lich', async (req, res) => {
   try {
     const { thoiGian, maBS } = req.body;
@@ -47,7 +41,6 @@ router.post('/dat-lich', async (req, res) => {
   }
 });
 
-// Hủy lịch hẹn
 router.put('/huy-lich/:maLH', async (req, res) => {
   try {
     const { maLH } = req.params;
@@ -69,36 +62,22 @@ router.put('/huy-lich/:maLH', async (req, res) => {
   }
 });
 
-// ============================================================
-// 2. BÁC SĨ (để bệnh nhân chọn khi đặt lịch)
-// ============================================================
-
+// Bác sĩ (không có ChuyenKhoa)
 router.get('/bac-si', async (req, res) => {
   try {
-    const { chuyenKhoa } = req.query;
-    let query = `
-      SELECT bs."MaBS", bs."HoTen", bs."ChuyenKhoa", pk."TenPhong"
+    const result = await pool.query(`
+      SELECT bs."MaBS", bs."HoTen", bs."SDT", bs."MaPK", pk."TenPhong"
       FROM "BacSi" bs
       LEFT JOIN "PhongKham" pk ON bs."MaPK" = pk."MaPK"
-      WHERE 1=1
-    `;
-    const params = [];
-    if (chuyenKhoa) {
-      query += ` AND bs."ChuyenKhoa" ILIKE $1`;
-      params.push(`%${chuyenKhoa}%`);
-    }
-    query += ` ORDER BY bs."HoTen"`;
-    const result = await pool.query(query, params);
+      ORDER BY bs."HoTen"
+    `);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ============================================================
-// 3. LỊCH SỬ KHÁM (BỆNH ÁN + ĐƠN THUỐC + HÓA ĐƠN)
-// ============================================================
-
+// Lịch sử khám + hóa đơn
 router.get('/lich-su-kham', async (req, res) => {
   try {
     const result = await pool.query(
@@ -111,9 +90,7 @@ router.get('/lich-su-kham', async (req, res) => {
        LEFT JOIN "DonThuoc" dt ON ba."MaBA" = dt."MaBA"
        LEFT JOIN "Thuoc" t ON dt."MaThuoc" = t."MaThuoc"
        LEFT JOIN "HoaDon" hd ON ba."MaBA" = hd."MaBA"
-       WHERE ba."MaLH" IN (
-           SELECT "MaLH" FROM "LichHen" WHERE "MaBN" = $1
-       )
+       WHERE ba."MaLH" IN (SELECT "MaLH" FROM "LichHen" WHERE "MaBN" = $1)
        ORDER BY ba."NgayTao" DESC, dt."MaDon"`,
       [req.maBN]
     );
@@ -151,11 +128,7 @@ router.get('/lich-su-kham', async (req, res) => {
   }
 });
 
-// ============================================================
-// 4. HÓA ĐƠN
-// ============================================================
-
-// Lấy danh sách hóa đơn của bệnh nhân
+// Hóa đơn
 router.get('/hoa-don', async (req, res) => {
   try {
     const result = await pool.query(
@@ -175,11 +148,9 @@ router.get('/hoa-don', async (req, res) => {
   }
 });
 
-// Lấy chi tiết một hóa đơn (kèm đơn thuốc)
 router.get('/hoa-don/:maHD', async (req, res) => {
   try {
     const { maHD } = req.params;
-    // Kiểm tra hóa đơn thuộc về bệnh nhân này
     const check = await pool.query(
       `SELECT hd.*, bn."MaBN"
        FROM "HoaDon" hd
@@ -193,8 +164,6 @@ router.get('/hoa-don/:maHD', async (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy hóa đơn hoặc không có quyền' });
     }
     const hoaDon = check.rows[0];
-
-    // Lấy chi tiết đơn thuốc (nếu có)
     const thuocResult = await pool.query(
       `SELECT dt.*, t."TenThuoc", t."DonGia", t."DonVi"
        FROM "DonThuoc" dt
