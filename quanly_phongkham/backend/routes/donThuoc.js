@@ -18,7 +18,7 @@ router.get('/benh-an/:maBA', async (req, res) => {
   }
 });
 
-// Thêm thuốc vào đơn (hoặc tạo đơn mới)
+// Thêm thuốc vào đơn
 router.post('/', async (req, res) => {
   try {
     const { MaBA, MaThuoc, SoLuong, LieuDung, HuongDan } = req.body;
@@ -33,7 +33,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Xoá thuốc khỏi đơn (gọi sp_xu_ly_thuoc với hành động 'xoa')
+// Xoá thuốc khỏi đơn
 router.delete('/', async (req, res) => {
   try {
     const { maBA, maThuoc } = req.body;

@@ -44,12 +44,6 @@ router.post('/', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [MaBN, HoTen, NgaySinh, GioiTinh, SDT]
     );
-    const matKhauMacDinh = '123456';
-    await pool.query(
-      `INSERT INTO "TaiKhoanBenhNhan" ("MaBN", "MatKhauHash")
-       VALUES ($1, crypt($2, gen_salt('bf')))`,
-      [MaBN, matKhauMacDinh]
-    );
     await pool.query('COMMIT');
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -64,8 +58,44 @@ router.post('/', async (req, res) => {
   }
 });
 
+router.put('/:maBN', async (req, res) => {
+  try {
+    const { maBN } = req.params;
+    const { HoTen, NgaySinh, GioiTinh, SDT } = req.body;
+    const result = await pool.query(
+      `UPDATE "BenhNhan" SET "HoTen" = $1, "NgaySinh" = $2, "GioiTinh" = $3, "SDT" = $4
+       WHERE "MaBN" = $5 RETURNING *`,
+      [HoTen, NgaySinh, GioiTinh, SDT, maBN]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy bệnh nhân' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.message.includes('chk_benhnhan_sdt')) {
+      res.status(400).json({ error: 'Số điện thoại không hợp lệ!' });
+    } else {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+router.delete('/:maBN', async (req, res) => {
+  try {
+    const { maBN } = req.params;
+    const check = await pool.query(`SELECT EXISTS (SELECT 1 FROM "LichHen" WHERE "MaBN" = $1)`, [maBN]);
+    if (check.rows[0].exists) {
+      return res.status(400).json({ error: 'Không thể xóa bệnh nhân đã có lịch hẹn!' });
+    }
+    await pool.query('DELETE FROM "BenhNhan" WHERE "MaBN" = $1', [maBN]);
+    res.json({ message: 'Xóa bệnh nhân thành công' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============================================================
-// 2. QUẢN LÝ BÁC SĨ (không có ChuyenKhoa)
+// 2. QUẢN LÝ BÁC SĨ (cho admin)
 // ============================================================
 router.get('/bac-si', async (req, res) => {
   try {
@@ -136,27 +166,59 @@ router.put('/bac-si/:maBS', async (req, res) => {
   }
 });
 
+// ============================================================
+// THÊM BÁC SĨ + TỰ ĐỘNG TẠO CA LÀM VIỆC 30 NGÀY
+// ============================================================
 router.post('/bac-si', async (req, res) => {
   try {
     const { MaBS, HoTen, SDT, MaPK } = req.body;
     if (!MaBS || !HoTen) {
       return res.status(400).json({ error: 'Thiếu thông tin bắt buộc (MaBS, HoTen)' });
     }
+
+    // Bắt đầu transaction
+    await pool.query('BEGIN');
+
+    // Kiểm tra MaPK nếu có
     if (MaPK) {
       const check = await pool.query('SELECT 1 FROM "PhongKham" WHERE "MaPK" = $1', [MaPK]);
       if (check.rows.length === 0) {
+        await pool.query('ROLLBACK');
         return res.status(400).json({ error: 'Mã phòng khám không tồn tại!' });
       }
     }
+
+    // Thêm bác sĩ
     const result = await pool.query(
-      `INSERT INTO "BacSi" ("MaBS", "HoTen", "SDT", "MaPK") VALUES ($1, $2, $3, $4) RETURNING *`,
+      `INSERT INTO "BacSi" ("MaBS", "HoTen", "SDT", "MaPK") 
+       VALUES ($1, $2, $3, $4) RETURNING *`,
       [MaBS, HoTen, SDT, MaPK || null]
     );
-    res.status(201).json(result.rows[0]);
+
+    const newDoctor = result.rows[0];
+
+    // Tạo ca làm việc cho 30 ngày tới, từ 8h-17h
+    const insertCa = `
+      INSERT INTO "CaLamViec" ("MaBS", "NgayLam", "BatDau", "KetThuc")
+      SELECT $1, d.ngay, '08:00:00'::TIME, '17:00:00'::TIME
+      FROM generate_series(
+        CURRENT_DATE,
+        CURRENT_DATE + 30,
+        '1 day'::INTERVAL
+      ) AS d(ngay)
+      ON CONFLICT ("MaBS", "NgayLam") DO NOTHING
+    `;
+    await pool.query(insertCa, [MaBS]);
+
+    await pool.query('COMMIT');
+
+    res.status(201).json(newDoctor);
   } catch (err) {
+    await pool.query('ROLLBACK');
     if (err.message.includes('duplicate key')) {
       res.status(400).json({ error: 'Mã bác sĩ đã tồn tại!' });
     } else {
+      console.error('Lỗi thêm bác sĩ:', err);
       res.status(500).json({ error: err.message });
     }
   }
@@ -242,7 +304,7 @@ router.delete('/thuoc/:maThuoc', async (req, res) => {
 });
 
 // ============================================================
-// 4. QUẢN LÝ BỆNH ÁN
+// 4. BỆNH ÁN
 // ============================================================
 router.get('/benh-an', async (req, res) => {
   try {
@@ -360,7 +422,7 @@ router.delete('/benh-an/:maBA', async (req, res) => {
 });
 
 // ============================================================
-// 5. CÁC ROUTE ĐỘNG (PHẢI ĐẶT SAU CÁC ROUTE CỤ THỂ)
+// 5. ROUTE ĐỘNG
 // ============================================================
 router.get('/:maBN', async (req, res) => {
   try {
@@ -370,41 +432,6 @@ router.get('/:maBN', async (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy bệnh nhân' });
     }
     res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.put('/:maBN', async (req, res) => {
-  try {
-    const { maBN } = req.params;
-    const { HoTen, NgaySinh, GioiTinh, SDT } = req.body;
-    const result = await pool.query(
-      `UPDATE "BenhNhan" SET "HoTen" = $1, "NgaySinh" = $2, "GioiTinh" = $3, "SDT" = $4 WHERE "MaBN" = $5 RETURNING *`,
-      [HoTen, NgaySinh, GioiTinh, SDT, maBN]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Không tìm thấy bệnh nhân' });
-    }
-    res.json(result.rows[0]);
-  } catch (err) {
-    if (err.message.includes('chk_benhnhan_sdt')) {
-      res.status(400).json({ error: 'Số điện thoại không hợp lệ!' });
-    } else {
-      res.status(500).json({ error: err.message });
-    }
-  }
-});
-
-router.delete('/:maBN', async (req, res) => {
-  try {
-    const { maBN } = req.params;
-    const check = await pool.query(`SELECT EXISTS (SELECT 1 FROM "LichHen" WHERE "MaBN" = $1)`, [maBN]);
-    if (check.rows[0].exists) {
-      return res.status(400).json({ error: 'Không thể xóa bệnh nhân đã có lịch hẹn!' });
-    }
-    await pool.query('DELETE FROM "BenhNhan" WHERE "MaBN" = $1', [maBN]);
-    res.json({ message: 'Xóa bệnh nhân thành công' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

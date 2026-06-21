@@ -71,27 +71,19 @@
 
   async function loadDashboard() {
     try {
-      // Lấy danh sách lịch hẹn
       const resApp = await fetch('http://localhost:5000/api/patient/lich-hen', {
         headers: { 'x-mabn': user.MaBN }
       });
       const appointments = await resApp.json();
-
       const now = new Date();
-
-      // Lọc lịch hẹn sắp tới: chỉ tính những lịch có trạng thái Chờ khám hoặc Đang khám và thời gian bắt đầu >= hiện tại
       const upcoming = appointments.filter(a => {
         const start = new Date(a.ThoiGianBatDau);
         return (a.TrangThai === 'Chờ khám' || a.TrangThai === 'Đang khám') && start >= now;
       });
-
-      // Tổng số lần khám: chỉ tính những lịch đã hoàn thành (Đã khám)
       const totalRecords = appointments.filter(a => a.TrangThai === 'Đã khám').length;
-
       document.getElementById('upcomingCount').textContent = upcoming.length;
       document.getElementById('totalRecords').textContent = totalRecords;
 
-      // Lấy lịch sử khám để đếm số hóa đơn
       const resHist = await fetch('http://localhost:5000/api/patient/lich-su-kham', {
         headers: { 'x-mabn': user.MaBN }
       });
@@ -99,7 +91,6 @@
       const totalInvoices = history.filter(item => item.hoaDon !== null).length;
       document.getElementById('totalInvoices').textContent = totalInvoices;
 
-      // Hiển thị 3 lịch hẹn gần nhất (sắp tới hoặc đã qua nhưng gần đây)
       const recent = appointments.slice(0, 3);
       const container = document.getElementById('recentAppointments');
       if (recent.length === 0) {

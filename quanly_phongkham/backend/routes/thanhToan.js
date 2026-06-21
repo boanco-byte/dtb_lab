@@ -3,10 +3,8 @@ const router = express.Router();
 const pool = require('../db');
 
 // ============================================================
-// 1. CÁC ROUTE CỤ THỂ (ĐẶT TRƯỚC)
+// LẤY DANH SÁCH HÓA ĐƠN CHƯA THANH TOÁN
 // ============================================================
-
-// Lấy danh sách hóa đơn chưa thanh toán
 router.get('/chua-thanh-toan', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -25,7 +23,9 @@ router.get('/chua-thanh-toan', async (req, res) => {
   }
 });
 
-// Lấy danh sách hóa đơn theo ngày (hoặc 100 gần nhất)
+// ============================================================
+// LẤY DANH SÁCH HÓA ĐƠN THEO NGÀY
+// ============================================================
 router.get('/theo-ngay', async (req, res) => {
   try {
     const { ngay, trangThai } = req.query;
@@ -58,27 +58,12 @@ router.get('/theo-ngay', async (req, res) => {
   }
 });
 
-// Thanh toán hóa đơn (POST) – đặt trước route GET động
-router.post('/hoa-don/:maHD', async (req, res) => {
-  try {
-    const { maHD } = req.params;
-    await pool.query('CALL sp_thanh_toan_hoa_don($1)', [maHD]);
-    res.json({ message: 'Thanh toán thành công' });
-  } catch (err) {
-    console.error('Lỗi thanh toán hóa đơn:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ============================================================
-// 2. ROUTE ĐỘNG (ĐẶT CUỐI CÙNG)
+// LẤY CHI TIẾT HÓA ĐƠN
 // ============================================================
-
-// Lấy chi tiết một hóa đơn (GET) – chỉ bắt khi maHD là số nguyên
 router.get('/:maHD', async (req, res) => {
   try {
     const { maHD } = req.params;
-    // Kiểm tra maHD có phải số nguyên không
     if (!/^\d+$/.test(maHD)) {
       return res.status(400).json({ error: 'Mã hóa đơn không hợp lệ' });
     }
@@ -105,6 +90,36 @@ router.get('/:maHD', async (req, res) => {
     res.json(hoaDon);
   } catch (err) {
     console.error('Lỗi lấy chi tiết hóa đơn:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// THANH TOÁN TIỀN KHÁM
+// ============================================================
+router.post('/tien-kham/:maHD', async (req, res) => {
+  try {
+    const { maHD } = req.params;
+    const { phuongThuc } = req.body;
+    await pool.query('CALL sp_thanh_toan_tien_kham($1, $2)', [maHD, phuongThuc || 'Tiền mặt']);
+    res.json({ message: 'Thanh toán tiền khám thành công' });
+  } catch (err) {
+    console.error('Lỗi thanh toán tiền khám:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// THANH TOÁN TIỀN THUỐC
+// ============================================================
+router.post('/tien-thuoc/:maHD', async (req, res) => {
+  try {
+    const { maHD } = req.params;
+    const { phuongThuc } = req.body;
+    await pool.query('CALL sp_thanh_toan_thuoc($1, $2)', [maHD, phuongThuc || 'Tiền mặt']);
+    res.json({ message: 'Thanh toán tiền thuốc thành công' });
+  } catch (err) {
+    console.error('Lỗi thanh toán tiền thuốc:', err);
     res.status(500).json({ error: err.message });
   }
 });

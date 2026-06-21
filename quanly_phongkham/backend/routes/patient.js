@@ -4,14 +4,12 @@ const pool = require('../db');
 
 router.use((req, res, next) => {
   const maBN = req.headers['x-mabn'];
-  if (!maBN) {
-    return res.status(401).json({ error: 'Chưa xác thực' });
-  }
+  if (!maBN) return res.status(401).json({ error: 'Chưa xác thực' });
   req.maBN = maBN;
   next();
 });
 
-// Lịch hẹn
+// Lấy danh sách lịch hẹn
 router.get('/lich-hen', async (req, res) => {
   try {
     const result = await pool.query(
@@ -28,41 +26,35 @@ router.get('/lich-hen', async (req, res) => {
   }
 });
 
+// Đặt lịch mới (theo ngày và ca)
 router.post('/dat-lich', async (req, res) => {
   try {
-    const { thoiGian, maBS } = req.body;
-    if (!thoiGian) {
-      return res.status(400).json({ error: 'Thiếu thời gian' });
+    const { ngay, caSo, maBS } = req.body;
+    if (!ngay) {
+      return res.status(400).json({ error: 'Thiếu ngày khám' });
     }
-    await pool.query('CALL sp_dat_lich($1, $2, $3)', [req.maBN, thoiGian, maBS || null]);
+    await pool.query('CALL sp_dat_lich($1, $2, $3, $4)', [
+      req.maBN, ngay, maBS || null, caSo || null
+    ]);
     res.status(201).json({ message: 'Đặt lịch thành công' });
   } catch (err) {
+    console.error('Lỗi đặt lịch:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
+// Hủy lịch hẹn
 router.put('/huy-lich/:maLH', async (req, res) => {
   try {
     const { maLH } = req.params;
-    const check = await pool.query(
-      `SELECT "TrangThai" FROM "LichHen" WHERE "MaLH" = $1 AND "MaBN" = $2`,
-      [maLH, req.maBN]
-    );
-    if (check.rows.length === 0) {
-      return res.status(404).json({ error: 'Không tìm thấy lịch hẹn hoặc không có quyền' });
-    }
-    const status = check.rows[0].TrangThai;
-    if (!['Chờ khám', 'Đang khám'].includes(status)) {
-      return res.status(400).json({ error: 'Không thể hủy lịch đã hoàn thành hoặc đã hủy' });
-    }
-    await pool.query(`UPDATE "LichHen" SET "TrangThai" = 'Đã hủy' WHERE "MaLH" = $1`, [maLH]);
+    await pool.query('CALL sp_huy_lich($1)', [maLH]);
     res.json({ message: 'Hủy lịch thành công' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Bác sĩ (không có ChuyenKhoa)
+// Lấy danh sách bác sĩ (không có chuyên khoa)
 router.get('/bac-si', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -128,7 +120,7 @@ router.get('/lich-su-kham', async (req, res) => {
   }
 });
 
-// Hóa đơn
+// Danh sách hóa đơn của bệnh nhân
 router.get('/hoa-don', async (req, res) => {
   try {
     const result = await pool.query(

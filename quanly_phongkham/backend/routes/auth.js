@@ -2,16 +2,15 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 
+// Đăng nhập bằng số điện thoại
 router.post('/login', async (req, res) => {
   try {
     const { sdt, matKhau } = req.body;
-    console.log('📩 Nhận request đăng nhập:', { sdt, matKhau }); // log để debug
-
     if (!sdt || !matKhau) {
       return res.status(400).json({ error: 'Thiếu số điện thoại hoặc mật khẩu' });
     }
 
-    // Tìm bệnh nhân theo số điện thoại
+    // 1. Tìm bệnh nhân theo số điện thoại
     const userResult = await pool.query(
       `SELECT "MaBN", "HoTen", "SDT" FROM "BenhNhan" WHERE "SDT" = $1`,
       [sdt]
@@ -22,7 +21,7 @@ router.post('/login', async (req, res) => {
     const user = userResult.rows[0];
     const maBN = user.MaBN;
 
-    // Lấy mật khẩu hash
+    // 2. Lấy mật khẩu hash
     const passResult = await pool.query(
       `SELECT "MatKhauHash" FROM "TaiKhoanBenhNhan" WHERE "MaBN" = $1`,
       [maBN]
@@ -32,7 +31,7 @@ router.post('/login', async (req, res) => {
     }
     const hash = passResult.rows[0].MatKhauHash;
 
-    // Kiểm tra mật khẩu
+    // 3. Kiểm tra mật khẩu
     const check = await pool.query(
       `SELECT crypt($1, $2) = $2 AS match`,
       [matKhau, hash]
@@ -41,9 +40,9 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Sai mật khẩu' });
     }
 
+    // 4. Trả về thông tin bệnh nhân
     res.json({ message: 'Đăng nhập thành công', user });
   } catch (err) {
-    console.error('Lỗi đăng nhập:', err);
     res.status(500).json({ error: err.message });
   }
 });

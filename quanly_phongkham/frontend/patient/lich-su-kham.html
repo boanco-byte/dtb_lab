@@ -14,7 +14,6 @@
     .sidebar .nav-link i { width: 24px; }
     .main-content { padding: 30px; }
     .card-history { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.04); margin-bottom: 20px; }
-    .badge-status { padding: 6px 12px; border-radius: 20px; }
   </style>
 </head>
 <body>
@@ -50,7 +49,6 @@
       const res = await fetch('http://localhost:5000/api/patient/lich-su-kham', {
         headers: { 'x-mabn': user.MaBN }
       });
-      if (!res.ok) throw new Error('Lỗi tải dữ liệu');
       const data = await res.json();
       const container = document.getElementById('historyList');
       if (data.length === 0) {

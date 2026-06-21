@@ -7,8 +7,9 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <style>
-        body { background: #f4f7fc; }
+        body { background: #f4f7fc; font-family: 'Segoe UI', sans-serif; }
         .card-custom { max-width: 600px; margin: 40px auto; border: none; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
+        .form-control:focus { border-color: #0d6efd; box-shadow: 0 0 0 0.25rem rgba(13,110,253,0.2); }
         .btn-primary { background: #0d6efd; border: none; border-radius: 30px; padding: 10px 40px; font-weight: 600; }
         .btn-primary:hover { background: #0b5ed7; }
         .back-link { display: inline-block; margin: 20px 0 0 20px; color: #0d6efd; }
@@ -16,61 +17,113 @@
 </head>
 <body>
 <div class="container">
-    <a href="danh-sach-lich.html" class="back-link"><i class="fas fa-arrow-left"></i> Quay lại</a>
+    <a href="index.html" class="back-link"><i class="fas fa-arrow-left"></i> Quay lại</a>
     <div class="card card-custom p-4 bg-white">
-        <h4 class="text-center mb-3"><i class="fas fa-calendar-plus text-primary"></i> Đặt lịch hẹn</h4>
-        <form id="formDatLich">
+        <h3 class="text-center mb-4"><i class="fas fa-calendar-plus text-primary"></i> Đặt lịch hẹn</h3>
+        <form id="datLichForm">
             <div class="mb-3">
-                <label class="form-label fw-semibold">Mã bệnh nhân <span class="text-danger">*</span></label>
-                <input type="text" class="form-control" id="maBN" placeholder="VD: BN001" required>
+                <label class="form-label fw-semibold">Bệnh nhân <span class="text-danger">*</span></label>
+                <select class="form-select" id="maBN" required>
+                    <option value="">-- Chọn bệnh nhân --</option>
+                </select>
             </div>
             <div class="mb-3">
-                <label class="form-label fw-semibold">Thời gian <span class="text-danger">*</span></label>
-                <input type="datetime-local" class="form-control" id="thoiGian" required>
+                <label class="form-label fw-semibold">Bác sĩ</label>
+                <select class="form-select" id="maBS">
+                    <option value="">-- Hệ thống tự chọn --</option>
+                </select>
             </div>
             <div class="mb-3">
-                <label class="form-label fw-semibold">Mã bác sĩ (để trống tự động)</label>
-                <input type="text" class="form-control" id="maBS" placeholder="VD: BS001">
-                <small class="text-muted">Hệ thống sẽ tự tìm bác sĩ rảnh</small>
+                <label class="form-label fw-semibold">Ngày khám <span class="text-danger">*</span></label>
+                <input type="date" class="form-control" id="ngayKham" required>
             </div>
-            <div id="msg" class="mb-3"></div>
-            <button type="submit" class="btn btn-primary w-100"><i class="fas fa-check-circle"></i> Đặt lịch</button>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Ca khám</label>
+                <select class="form-select" id="caSo">
+                    <option value="">-- Tự động --</option>
+                    <option value="1">Ca 1: 08:00 - 09:30</option>
+                    <option value="2">Ca 2: 09:30 - 11:00</option>
+                    <option value="3">Ca 3: 11:00 - 12:30</option>
+                    <option value="4">Ca 4: 13:00 - 14:30</option>
+                    <option value="5">Ca 5: 14:30 - 16:00</option>
+                    <option value="6">Ca 6: 16:00 - 17:30</option>
+                </select>
+            </div>
+            <div id="message" class="mb-3"></div>
+            <button type="submit" class="btn btn-primary w-100"><i class="fas fa-save"></i> Đặt lịch</button>
         </form>
     </div>
 </div>
 <script>
-    document.getElementById('formDatLich').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        const maBN = document.getElementById('maBN').value.trim();
-        const thoiGian = document.getElementById('thoiGian').value;
-        const maBS = document.getElementById('maBS').value.trim() || null;
-        const msg = document.getElementById('msg');
+    const API = 'http://localhost:5000/api/lich-hen/dat';
 
-        if (!maBN || !thoiGian) {
-            msg.innerHTML = '<div class="alert alert-warning">Vui lòng điền đầy đủ thông tin</div>';
+    // Load danh sách bệnh nhân
+    async function loadPatients() {
+        try {
+            const res = await fetch('http://localhost:5000/api/benh-nhan');
+            const data = await res.json();
+            const select = document.getElementById('maBN');
+            data.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.MaBN;
+                opt.textContent = `${p.MaBN} - ${p.HoTen}`;
+                select.appendChild(opt);
+            });
+        } catch (err) {
+            console.error('Lỗi tải bệnh nhân:', err);
+        }
+    }
+
+    // Load danh sách bác sĩ
+    async function loadDoctors() {
+        try {
+            const res = await fetch('http://localhost:5000/api/benh-nhan/bac-si');
+            const data = await res.json();
+            const select = document.getElementById('maBS');
+            data.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d.MaBS;
+                opt.textContent = `${d.HoTen} (${d.ChuyenKhoa || 'Mắt'})`;
+                select.appendChild(opt);
+            });
+        } catch (err) {
+            console.error('Lỗi tải bác sĩ:', err);
+        }
+    }
+
+    document.getElementById('datLichForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const maBN = document.getElementById('maBN').value;
+        const ngay = document.getElementById('ngayKham').value;
+        const maBS = document.getElementById('maBS').value || null;
+        const caSo = document.getElementById('caSo').value ? parseInt(document.getElementById('caSo').value) : null;
+        const msg = document.getElementById('message');
+
+        if (!maBN || !ngay) {
+            msg.innerHTML = '<div class="alert alert-warning">Vui lòng chọn bệnh nhân và ngày khám</div>';
             return;
         }
 
         try {
-            const res = await fetch('http://localhost:5000/api/lich-hen/dat', {
+            const res = await fetch(API, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ maBN, thoiGian, maBS })
+                body: JSON.stringify({ maBN, ngay, maBS, caSo })
             });
             const data = await res.json();
             if (res.ok) {
                 msg.innerHTML = `<div class="alert alert-success">✅ ${data.message}</div>`;
-                // Chuyển về danh sách sau 1.5 giây
-                setTimeout(() => {
-                    window.location.href = 'danh-sach-lich.html';
-                }, 1500);
+                this.reset();
             } else {
                 msg.innerHTML = `<div class="alert alert-danger">❌ ${data.error}</div>`;
             }
-        } catch {
-            msg.innerHTML = '<div class="alert alert-danger">❌ Lỗi kết nối</div>';
+        } catch (err) {
+            msg.innerHTML = `<div class="alert alert-danger">❌ Lỗi kết nối: ${err.message}</div>`;
         }
     });
+
+    loadPatients();
+    loadDoctors();
 </script>
 </body>
 </html>

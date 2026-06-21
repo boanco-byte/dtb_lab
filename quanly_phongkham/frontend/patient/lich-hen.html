@@ -59,6 +59,7 @@
           <div>
             <strong>Bác sĩ:</strong> ${l.ten_bac_si}<br>
             <strong>Thời gian:</strong> ${new Date(l.ThoiGianBatDau).toLocaleString('vi-VN')} - ${new Date(l.ThoiGianKetThuc).toLocaleString('vi-VN')}
+            <strong>Ca:</strong> ${l.CaSo}<br>
             <span class="badge bg-${l.TrangThai === 'Đã khám' ? 'success' : l.TrangThai === 'Đang khám' ? 'warning' : l.TrangThai === 'Đã hủy' ? 'danger' : 'secondary'}">${l.TrangThai}</span>
           </div>
           <div>

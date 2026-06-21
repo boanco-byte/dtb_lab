@@ -25,7 +25,6 @@
         .status-badge { cursor: pointer; transition: 0.2s; }
         .status-badge:hover { transform: scale(1.05); opacity: 0.85; }
         .action-buttons .btn { margin: 2px; }
-        .table-scroll { max-height: 400px; overflow-y: auto; }
     </style>
 </head>
 <body>
@@ -58,7 +57,7 @@
                 <div class="col-md-3"><div class="stat-card border-danger"><div class="d-flex justify-content-between align-items-center"><div><div class="number" id="unpaidInvoices">0</div><div class="label">Hóa đơn chưa TT</div></div><i class="fas fa-exclamation-triangle icon"></i></div></div></div>
             </div>
 
-            <!-- Widget đặt lịch nhanh -->
+            <!-- Widget đặt lịch nhanh (cập nhật theo ca) -->
             <div class="card card-custom p-4 mb-4">
                 <h5 class="mb-3"><i class="fas fa-calendar-plus text-primary"></i> Đặt lịch nhanh</h5>
                 <form id="quickBookingForm" class="row g-3 align-items-end">
@@ -70,16 +69,24 @@
                         <label class="form-label fw-semibold">Bác sĩ</label>
                         <select class="form-select" id="quickMaBS"><option value="">-- Tự động --</option></select>
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label fw-semibold">Thời gian</label>
-                        <input type="datetime-local" class="form-control" id="quickThoiGian" required>
-                        <small class="text-muted">Giờ làm việc: 08:00 - 17:00</small>
+                    <div class="col-md-2">
+                        <label class="form-label fw-semibold">Ngày khám</label>
+                        <input type="date" class="form-control" id="quickNgay" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-semibold">Ca</label>
+                        <select class="form-select" id="quickCaSo">
+                            <option value="">-- Tự động --</option>
+                            <option value="1">1 (08:00-09:30)</option>
+                            <option value="2">2 (09:30-11:00)</option>
+                            <option value="3">3 (11:00-12:30)</option>
+                            <option value="4">4 (13:00-14:30)</option>
+                            <option value="5">5 (14:30-16:00)</option>
+                            <option value="6">6 (16:00-17:30)</option>
+                        </select>
                     </div>
                     <div class="col-md-2">
                         <button type="submit" class="btn btn-primary w-100"><i class="fas fa-check-circle"></i> Đặt</button>
-                    </div>
-                    <div class="col-md-1">
-                        <button type="button" class="btn btn-outline-secondary w-100" onclick="document.getElementById('quickBookingForm').reset()"><i class="fas fa-undo"></i></button>
                     </div>
                 </form>
                 <div id="quickBookingMsg" class="mt-3"></div>
@@ -88,22 +95,21 @@
             <!-- Lịch hẹn trong ngày -->
             <div class="table-responsive">
                 <h5 class="mb-3"><i class="fas fa-clock text-primary"></i> Lịch hẹn hôm nay</h5>
-                <div class="table-scroll">
-                    <table class="table table-hover align-middle">
-                        <thead>
-                            <tr>
-                                <th>Bệnh nhân</th>
-                                <th>Bác sĩ</th>
-                                <th>Thời gian</th>
-                                <th>Trạng thái</th>
-                                <th>Hành động</th>
-                            </tr>
-                        </thead>
-                        <tbody id="todayAppointmentsBody">
-                            <tr><td colspan="5" class="text-center text-muted">Đang tải...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Bệnh nhân</th>
+                            <th>Bác sĩ</th>
+                            <th>Thời gian</th>
+                            <th>Ca</th>
+                            <th>Trạng thái</th>
+                            <th>Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody id="todayAppointmentsBody">
+                        <tr><td colspan="6" class="text-center text-muted">Đang tải...</td></tr>
+                    </tbody>
+                </table>
             </div>
 
             <footer>© 2025 Quản lý phòng khám</footer>
@@ -111,9 +117,7 @@
     </div>
 </div>
 
-<!-- ============================================================
-     MODAL LẬP BỆNH ÁN
-     ============================================================ -->
+<!-- Modal lập bệnh án -->
 <div class="modal fade" id="benhAnModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -165,16 +169,12 @@
             const resLH = await fetch(API_BASE + '/lich-hen');
             const appointments = await resLH.json();
 
-            // Lọc lịch hẹn trong ngày hôm nay
             const todayStr = new Date().toISOString().slice(0, 10);
             const todayAppointments = appointments.filter(a => 
                 a.ThoiGianBatDau && a.ThoiGianBatDau.startsWith(todayStr)
             );
-
-            // Sắp xếp theo thời gian tăng dần
             todayAppointments.sort((a, b) => new Date(a.ThoiGianBatDau) - new Date(b.ThoiGianBatDau));
 
-            // Cập nhật số lịch hẹn hôm nay trên thống kê
             document.getElementById('todayAppointments').textContent = todayAppointments.length;
 
             const resDT = await fetch(API_BASE + '/thong-ke/hom-nay');
@@ -185,19 +185,18 @@
             const unpaid = await resHD.json();
             document.getElementById('unpaidInvoices').textContent = unpaid.length;
 
-            // Hiển thị lịch hẹn hôm nay (tất cả)
             const tbody = document.getElementById('todayAppointmentsBody');
             if (todayAppointments.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Không có lịch hẹn hôm nay</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Không có lịch hẹn hôm nay</td></tr>';
             } else {
                 tbody.innerHTML = todayAppointments.map(l => {
                     const canCreateBA = l.TrangThai === 'Đã khám';
-
                     return `
                         <tr>
                             <td>${l.ten_benh_nhan || 'N/A'}</td>
                             <td>${l.ten_bac_si || 'N/A'}</td>
                             <td>${l.ThoiGianBatDau ? new Date(l.ThoiGianBatDau).toLocaleString('vi-VN') : 'N/A'}</td>
+                            <td>Ca ${l.CaSo}</td>
                             <td>
                                 <span class="badge status-badge bg-${l.TrangThai === 'Đã khám' ? 'success' : l.TrangThai === 'Đang khám' ? 'warning' : l.TrangThai === 'Đã hủy' ? 'danger' : 'secondary'}"
                                       onclick="chuyenTrangThai(${l.MaLH}, '${l.TrangThai}')">
@@ -219,7 +218,7 @@
     }
 
     // ============================================================
-    // 2. CHUYỂN TRẠNG THÁI LỊCH HẸN (Click vào trạng thái)
+    // 2. CHUYỂN TRẠNG THÁI
     // ============================================================
     async function chuyenTrangThai(maLH, trangThaiHienTai) {
         let trangThaiMoi = '';
@@ -247,7 +246,7 @@
             const data = await res.json();
             if (res.ok) {
                 alert(`✅ Chuyển sang "${trangThaiMoi}" thành công`);
-                loadStats(); // reload
+                loadStats();
             } else {
                 alert('❌ Lỗi: ' + data.error);
             }
@@ -257,7 +256,7 @@
     }
 
     // ============================================================
-    // 3. HỦY LỊCH HẸN
+    // 3. HỦY LỊCH
     // ============================================================
     async function huyLich(maLH) {
         if (!confirm('Bạn có chắc muốn hủy lịch hẹn này?')) return;
@@ -276,7 +275,7 @@
     }
 
     // ============================================================
-    // 4. MỞ MODAL LẬP BỆNH ÁN
+    // 4. LẬP BỆNH ÁN
     // ============================================================
     function moModalLapBenhAn(maLH) {
         document.getElementById('baMaLH').value = maLH;
@@ -287,9 +286,6 @@
         baModalInstance.show();
     }
 
-    // ============================================================
-    // 5. LƯU BỆNH ÁN (gửi API)
-    // ============================================================
     document.getElementById('benhAnForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         const maLH = document.getElementById('baMaLH').value;
@@ -325,21 +321,8 @@
     });
 
     // ============================================================
-    // 6. ĐẶT LỊCH NHANH (có kiểm tra giờ làm việc)
+    // 5. ĐẶT LỊCH NHANH
     // ============================================================
-    // Kiểm tra giờ khi chọn thời gian
-    document.getElementById('quickThoiGian').addEventListener('change', function() {
-        const val = this.value;
-        if (val) {
-            const date = new Date(val);
-            const hour = date.getHours();
-            if (hour < 8 || hour >= 17) {
-                alert('⚠️ Vui lòng chọn giờ trong khoảng 08:00 - 17:00');
-                this.value = '';
-            }
-        }
-    });
-
     async function loadPatientsForBooking() {
         try {
             const res = await fetch(API_BASE + '/benh-nhan');
@@ -371,20 +354,13 @@
     document.getElementById('quickBookingForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         const maBN = document.getElementById('quickMaBN').value;
-        const thoiGian = document.getElementById('quickThoiGian').value;
+        const ngay = document.getElementById('quickNgay').value;
         const maBS = document.getElementById('quickMaBS').value || null;
+        const caSo = document.getElementById('quickCaSo').value ? parseInt(document.getElementById('quickCaSo').value) : null;
         const msg = document.getElementById('quickBookingMsg');
 
-        if (!maBN || !thoiGian) {
-            msg.innerHTML = '<div class="alert alert-warning">Vui lòng chọn bệnh nhân và thời gian</div>';
-            return;
-        }
-
-        // Kiểm tra giờ làm việc (phòng trường hợp chọn giờ sai)
-        const date = new Date(thoiGian);
-        const hour = date.getHours();
-        if (hour < 8 || hour >= 17) {
-            msg.innerHTML = '<div class="alert alert-warning">⚠️ Giờ khám phải nằm trong khoảng 08:00 - 17:00</div>';
+        if (!maBN || !ngay) {
+            msg.innerHTML = '<div class="alert alert-warning">Vui lòng chọn bệnh nhân và ngày khám</div>';
             return;
         }
 
@@ -392,7 +368,7 @@
             const res = await fetch(API_BASE + '/lich-hen/dat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ maBN, thoiGian, maBS })
+                body: JSON.stringify({ maBN, ngay, maBS, caSo })
             });
             const data = await res.json();
             if (res.ok) {
@@ -401,6 +377,7 @@
                 loadStats();
                 document.getElementById('quickMaBN').value = '';
                 document.getElementById('quickMaBS').value = '';
+                document.getElementById('quickCaSo').value = '';
             } else {
                 msg.innerHTML = `<div class="alert alert-danger">❌ ${data.error}</div>`;
             }
@@ -410,7 +387,7 @@
     });
 
     // ============================================================
-    // 7. KHỞI TẠO
+    // 6. KHỞI TẠO
     // ============================================================
     document.addEventListener('DOMContentLoaded', function() {
         baModalInstance = new bootstrap.Modal(document.getElementById('benhAnModal'));
